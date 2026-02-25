@@ -18,6 +18,7 @@ ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "ims-backend-e4fp.onrender.com",
+    "ims-frontend-lilac-alpha.vercel.app"
 ]
 
 
@@ -25,6 +26,7 @@ CSRF_TRUSTED_ORIGINS = [
    "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://ims-backend-e4fp.onrender.com",
+    "https://ims-frontend-lilac-alpha.vercel.app"
 ]
 
 # Application definition
@@ -48,9 +50,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -165,6 +167,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOWED_ORIGINS = [
     "https://ims-backend-e4fp.onrender.com",
+    "https://ims-frontend-lilac-alpha.vercel.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
