@@ -1,0 +1,197 @@
+[
+  {
+    "model": "inventory.device",
+    "pk": "11111111-1111-1111-1111-111111111111",
+    "fields": {
+      "device_id": "ASSET-1001",
+      "name": "Dell XPS 13",
+      "device_type": "laptop",
+      "brand": "Dell",
+      "model": "XPS 13",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "22222222-2222-2222-2222-222222222222",
+    "fields": {
+      "device_id": "ASSET-1002",
+      "name": "MacBook Pro",
+      "device_type": "laptop",
+      "brand": "Apple",
+      "model": "MacBook Pro 14",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "33333333-3333-3333-3333-333333333333",
+    "fields": {
+      "device_id": "ASSET-1003",
+      "name": "Lenovo ThinkPad T14",
+      "device_type": "laptop",
+      "brand": "Lenovo",
+      "model": "ThinkPad T14",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "44444444-4444-4444-4444-444444444444",
+    "fields": {
+      "device_id": "ASSET-1004",
+      "name": "HP EliteBook 840",
+      "device_type": "laptop",
+      "brand": "HP",
+      "model": "EliteBook 840",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "55555555-5555-5555-5555-555555555555",
+    "fields": {
+      "device_id": "ASSET-1005",
+      "name": "Microsoft Surface Pro",
+      "device_type": "tablet",
+      "brand": "Microsoft",
+      "model": "Surface Pro 8",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "66666666-6666-6666-6666-666666666666",
+    "fields": {
+      "device_id": "ASSET-2001",
+      "name": "iPhone 13",
+      "device_type": "phone",
+      "brand": "Apple",
+      "model": "iPhone 13",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "77777777-7777-7777-7777-777777777777",
+    "fields": {
+      "device_id": "ASSET-2002",
+      "name": "Samsung Galaxy S22",
+      "device_type": "phone",
+      "brand": "Samsung",
+      "model": "Galaxy S22",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "88888888-8888-8888-8888-888888888888",
+    "fields": {
+      "device_id": "ASSET-2003",
+      "name": "Google Pixel 6",
+      "device_type": "phone",
+      "brand": "Google",
+      "model": "Pixel 6",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "99999999-9999-9999-9999-999999999999",
+    "fields": {
+      "device_id": "ASSET-2004",
+      "name": "OnePlus 10",
+      "device_type": "phone",
+      "brand": "OnePlus",
+      "model": "10 Pro",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    "fields": {
+      "device_id": "ASSET-2005",
+      "name": "Pixel 5a",
+      "device_type": "phone",
+      "brand": "Google",
+      "model": "Pixel 5a",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    "fields": {
+      "device_id": "ASSET-3001",
+      "name": "Dell UltraSharp 27",
+      "device_type": "monitor",
+      "brand": "Dell",
+      "model": "U2720Q",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+    "fields": {
+      "device_id": "ASSET-3002",
+      "name": "HP 24mh",
+      "device_type": "monitor",
+      "brand": "HP",
+      "model": "24mh",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+    "fields": {
+      "device_id": "ASSET-3003",
+      "name": "LG 27UK850",
+      "device_type": "monitor",
+      "brand": "LG",
+      "model": "27UK850",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+    "fields": {
+      "device_id": "ASSET-3004",
+      "name": "ASUS ProArt 27",
+      "device_type": "monitor",
+      "brand": "ASUS",
+      "model": "PA278QV",
+      "status": "available",
+      "condition": "new"
+    }
+  },
+  {
+    "model": "inventory.device",
+    "pk": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "fields": {
+      "device_id": "ASSET-3005",
+      "name": "BenQ PD2700U",
+      "device_type": "monitor",
+      "brand": "BenQ",
+      "model": "PD2700U",
+      "status": "available",
+      "condition": "new"
+    }
+  }
+]
