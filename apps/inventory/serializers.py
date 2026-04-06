@@ -3,7 +3,7 @@ Inventory Serializers
 """
 from rest_framework import serializers
 from apps.authentication.serializers import EmployeeSerializer
-from .models import Device, Assignment, TicketRequest
+from .models import Device, Assignment, TicketRequest, DeviceRequest
 
 
 class DeviceSerializer(serializers.ModelSerializer):
@@ -18,7 +18,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             'id', 'device_id', 'name', 'device_type', 'brand', 'model',
             'serial_number', 'status', 'condition', 'specifications',
             'purchase_date', 'purchase_price', 'warranty_expiry',
-            'location', 'notes', 'image', 'created_at', 'updated_at',
+            'location', 'notes', 'image', 'image_url', 'created_at', 'updated_at',
             'created_by', 'created_by_name', 'current_assignment'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
@@ -64,9 +64,13 @@ class AssignmentSerializer(serializers.ModelSerializer):
             'id', 'device', 'device_details', 'employee', 'employee_details',
             'assigned_date', 'return_date', 'expected_return_date',
             'status', 'assignment_notes', 'return_notes',
-            'assigned_by', 'assigned_by_name'
+            'assigned_by', 'assigned_by_name',
+            'consent_form_data', 'consent_images', 'consent_approved',
+            'consent_approved_at', 'consent_approved_by',
+            'return_form_data', 'return_images', 'return_approved',
+            'return_approved_at', 'return_approved_by'
         ]
-        read_only_fields = ['id', 'assigned_date', 'assigned_by']
+        read_only_fields = ['id', 'assigned_date', 'assigned_by', 'consent_approved_at', 'consent_approved_by', 'return_approved_at', 'return_approved_by']
     
     def get_assigned_by_name(self, obj):
         if obj.assigned_by:
@@ -142,6 +146,36 @@ class TicketRequestListSerializer(serializers.ModelSerializer):
             'id', 'ticket_number', 'requested_by', 'requested_by_name',
             'ticket_type', 'priority', 'status', 'device', 'device_name',
             'subject', 'created_at'
+        ]
+
+
+class DeviceRequestSerializer(serializers.ModelSerializer):
+    """Serializer for DeviceRequest model"""
+    
+    requested_by_details = EmployeeSerializer(source='requested_by', read_only=True)
+    approved_by_details = EmployeeSerializer(source='approved_by', read_only=True)
+    
+    class Meta:
+        model = DeviceRequest
+        fields = [
+            'id', 'requested_by', 'requested_by_details', 'device_type',
+            'brand', 'model', 'specifications', 'reason', 'status',
+            'approved_at', 'approved_by', 'approved_by_details',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'approved_at', 'approved_by', 'created_at', 'updated_at']
+
+
+class DeviceRequestListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for device request list"""
+    
+    requested_by_name = serializers.CharField(source='requested_by.full_name', read_only=True)
+    
+    class Meta:
+        model = DeviceRequest
+        fields = [
+            'id', 'requested_by', 'requested_by_name', 'device_type',
+            'brand', 'model', 'status', 'created_at'
         ]
 
 

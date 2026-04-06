@@ -62,6 +62,7 @@ class Device(models.Model):
     # Additional Information
     notes = models.TextField(blank=True)
     image = models.ImageField(upload_to='devices/', null=True, blank=True)
+    image_url = models.URLField(blank=True, help_text="Live link to device image")
     
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
@@ -87,6 +88,9 @@ class Assignment(models.Model):
     """Model for device assignments to employees"""
     
     STATUS_CHOICES = [
+        ('pending_approval', 'Pending Approval'),
+        ('approved', 'Approved'),
+        ('consent_pending', 'Consent Pending'),
         ('active', 'Active'),
         ('returned', 'Returned'),
         ('lost', 'Lost'),
@@ -106,7 +110,7 @@ class Assignment(models.Model):
     return_date = models.DateTimeField(null=True, blank=True)
     expected_return_date = models.DateField(null=True, blank=True)
     
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_approval')
     
     # Notes
     assignment_notes = models.TextField(blank=True)
@@ -118,6 +122,30 @@ class Assignment(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         related_name='assignments_created'
+    )
+    
+    # Consent Form Data
+    consent_form_data = models.JSONField(default=dict, blank=True)
+    consent_images = models.JSONField(default=list, blank=True)  # list of image URLs or paths
+    consent_approved = models.BooleanField(default=False)
+    consent_approved_at = models.DateTimeField(null=True, blank=True)
+    consent_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='consent_approvals'
+    )
+    
+    # Return Form Data
+    return_form_data = models.JSONField(default=dict, blank=True)
+    return_images = models.JSONField(default=list, blank=True)
+    return_approved = models.BooleanField(default=False)
+    return_approved_at = models.DateTimeField(null=True, blank=True)
+    return_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='return_approvals'
     )
     
     class Meta:
@@ -136,12 +164,15 @@ class Assignment(models.Model):
         super().save(*args, **kwargs)
         
         # Update device status based on assignment status
-        if self.status == 'active':
+        if self.status in ['active', 'approved', 'consent_pending']:
             self.device.status = 'assigned'
         elif self.status == 'returned':
             self.device.status = 'available'
         elif self.status in ['lost', 'damaged']:
             self.device.status = 'maintenance'
+        elif self.status == 'pending_approval':
+            # Device is reserved or something, but keep as available or assigned
+            pass
         
         self.device.save(update_fields=['status'])
 
@@ -242,6 +273,48 @@ class TicketRequest(models.Model):
                 self.ticket_number = "TKT001"
         
         super().save(*args, **kwargs)
+
+
+class DeviceRequest(models.Model):
+    """Model for device requests by employees"""
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('assigned', 'Assigned'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='device_requests'
+    )
+    device_type = models.CharField(max_length=20, choices=Device.DEVICE_TYPE_CHOICES)
+    brand = models.CharField(max_length=100, blank=True)
+    model = models.CharField(max_length=100, blank=True)
+    specifications = models.JSONField(default=dict)
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='approved_requests'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'device_requests'
+        ordering = ['-created_at']
+        verbose_name = 'Device Request'
+        verbose_name_plural = 'Device Requests'
+    
+    def __str__(self):
+        return f"{self.requested_by.full_name} - {self.device_type}"
 
 
 class DashboardStats(models.Model):

@@ -19,6 +19,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'last_name',
             'full_name',
             'employee_id',
+            'hrms_id',
             'role',
             'department',
             'phone_number',
@@ -52,7 +53,7 @@ class SignupSerializer(serializers.ModelSerializer):
         model = Employee
         fields = [
             'email', 'password', 'password_confirm',
-            'first_name', 'last_name', 'department', 'phone_number'
+            'first_name', 'last_name', 'hrms_id', 'department', 'phone_number'
         ]
     
     def validate(self, attrs):
@@ -72,6 +73,7 @@ class SignupSerializer(serializers.ModelSerializer):
             password=validated_data['password'],
             first_name=validated_data['first_name'],
             last_name=validated_data['last_name'],
+            hrms_id=validated_data.get('hrms_id'),
             department=validated_data.get('department', ''),
             phone_number=validated_data.get('phone_number', ''),
         )

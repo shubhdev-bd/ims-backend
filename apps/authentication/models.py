@@ -59,6 +59,7 @@ class Employee(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     employee_id = models.CharField(max_length=20, unique=True, blank=True, null=True)
+    hrms_id = models.CharField(max_length=50, unique=True, blank=True, null=True)
     
     # Role and Department
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='employee')
