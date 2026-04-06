@@ -56,16 +56,17 @@ def send_email_via_apps_script(to_email, subject, html_content, text_content=Non
     
     try:
         payload = {
+            'type': 'send_email',
             'to': to_email,
             'subject': subject,
+            'body': text_content or html_content,
             'htmlBody': html_content,
+            'textBody': text_content or html_content,
+            'from_email': settings.DEFAULT_FROM_EMAIL,
+            'api_key': settings.APPS_SCRIPT_API_KEY,
         }
-        
-        if text_content:
-            payload['textBody'] = text_content
-        
-        # Add API key if configured
-        headers = {}
+
+        headers = {'Content-Type': 'application/json'}
         if settings.APPS_SCRIPT_API_KEY:
             headers['Authorization'] = f'Bearer {settings.APPS_SCRIPT_API_KEY}'
         

@@ -7,8 +7,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q, Count
 from django.utils import timezone
-from django.core.mail import send_mail
 from django.conf import settings
+from .email_service import email_service
 from .serializers import (
     DeviceSerializer,
     DeviceListSerializer,
@@ -21,6 +21,8 @@ from .serializers import (
     DashboardStatsSerializer,
 )
 from .permissions import IsAdminOrReadOnly, IsAdminOrManager
+from .models import Device, Assignment, TicketRequest, DeviceRequest
+from apps.authentication.models import Employee
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
@@ -213,40 +215,9 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         assignment.status = 'active'
         assignment.save()
         
-        # Send email notification
-        subject = f"Device Assigned - {assignment.device.name}"
-        message = f"""
-        Dear {assignment.employee.full_name},
+        # Send email notification through Apps Script
+        email_service.send_assignment_approved_email(assignment)
 
-        A device has been assigned to you.
-
-        Device Details:
-        - Device ID: {assignment.device.device_id}
-        - Name: {assignment.device.name}
-        - Type: {assignment.device.get_device_type_display()}
-        - Brand: {assignment.device.brand}
-        - Model: {assignment.device.model}
-        - Serial Number: {assignment.device.serial_number or 'N/A'}
-
-        Assignment Details:
-        - Assigned Date: {assignment.assigned_date.date()}
-        - Expected Return Date: {assignment.expected_return_date}
-        - Assigned By: {request.user.full_name}
-
-        Please ensure the device is returned by the expected return date.
-
-        Best regards,
-        Inventory Management System
-        """
-        
-        send_mail(
-            subject,
-            message,
-            settings.DEFAULT_FROM_EMAIL,
-            [assignment.employee.email, request.user.email],
-            fail_silently=True
-        )
-        
         serializer = self.get_serializer(assignment)
         return Response({
             'message': 'Consent approved successfully',
@@ -359,8 +330,9 @@ class TicketRequestViewSet(viewsets.ModelViewSet):
         return queryset
     
     def perform_create(self, serializer):
-        serializer.save(requested_by=self.request.user)
-    
+        ticket = serializer.save(requested_by=self.request.user)
+        email_service.send_ticket_created_email(ticket)
+
     @action(detail=True, methods=['post'])
     def assign(self, request, pk=None):
         """Assign ticket to an employee"""
@@ -377,6 +349,8 @@ class TicketRequestViewSet(viewsets.ModelViewSet):
             ticket.assigned_to = employee
             ticket.status = 'in_progress'
             ticket.save()
+            
+            email_service.send_ticket_assigned_email(ticket)
             
             serializer = self.get_serializer(ticket)
             return Response({
@@ -403,6 +377,8 @@ class TicketRequestViewSet(viewsets.ModelViewSet):
         ticket.resolution_notes = resolution_notes
         ticket.resolved_at = timezone.now()
         ticket.save()
+        
+        email_service.send_ticket_resolved_email(ticket)
         
         serializer = self.get_serializer(ticket)
         return Response({
@@ -449,89 +425,78 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         device_request = serializer.save(requested_by=self.request.user)
-        
-        # Send email to user
+
         subject = "Device Request Submitted"
-        message = f"""
-        Dear {self.request.user.full_name},
-
-        Your device request has been submitted successfully.
-
-        Request Details:
-        - Device Type: {device_request.device_type}
-        - Brand: {device_request.brand or 'N/A'}
-        - Model: {device_request.model or 'N/A'}
-        - Reason: {device_request.reason}
-
-        You will be notified once your request is reviewed.
-
-        Best regards,
-        Inventory Management System
+        html_body = f"""
+        <p>Dear {self.request.user.full_name},</p>
+        <p>Your device request has been submitted successfully.</p>
+        <p><strong>Device Type:</strong> {device_request.device_type}</p>
+        <p><strong>Brand:</strong> {device_request.brand or 'N/A'}</p>
+        <p><strong>Model:</strong> {device_request.model or 'N/A'}</p>
+        <p><strong>Reason:</strong> {device_request.reason}</p>
+        <p>You will be notified once your request is reviewed.</p>
+        <p>Best regards,<br/>Inventory Management System</p>
         """
-        
-        send_mail(
-            subject,
-            message,
-            settings.DEFAULT_FROM_EMAIL,
+        text_body = f"Device request submitted for {device_request.device_type}.\nReason: {device_request.reason}"
+
+        email_service.send_generic_email(
             [self.request.user.email],
-            fail_silently=True
+            subject,
+            text_body,
+            html_body=html_body,
         )
-        
-        # Send email to admins
+
         admin_subject = f"New Device Request - {self.request.user.full_name}"
-        admin_message = f"""
-        A new device request has been submitted.
-
-        Requested By: {self.request.user.full_name} ({self.request.user.email})
-        HRMS ID: {self.request.user.hrms_id or 'N/A'}
-        Device Type: {device_request.device_type}
-        Brand: {device_request.brand or 'N/A'}
-        Model: {device_request.model or 'N/A'}
-        Reason: {device_request.reason}
-
-        Please review and approve/reject the request.
+        admin_html = f"""
+        <p>A new device request has been submitted.</p>
+        <p><strong>Requested By:</strong> {self.request.user.full_name} ({self.request.user.email})</p>
+        <p><strong>HRMS ID:</strong> {self.request.user.hrms_id or 'N/A'}</p>
+        <p><strong>Device Type:</strong> {device_request.device_type}</p>
+        <p><strong>Brand:</strong> {device_request.brand or 'N/A'}</p>
+        <p><strong>Model:</strong> {device_request.model or 'N/A'}</p>
+        <p><strong>Reason:</strong> {device_request.reason}</p>
+        <p>Please review and approve/reject the request.</p>
         """
-        
+        admin_text = f"New device request submitted by {self.request.user.full_name} ({self.request.user.email}).\nDevice Type: {device_request.device_type}.\nReason: {device_request.reason}"
+
         admins = Employee.objects.filter(role='admin')
         admin_emails = [admin.email for admin in admins]
-        
         if admin_emails:
-            send_mail(
-                admin_subject,
-                admin_message,
-                settings.DEFAULT_FROM_EMAIL,
+            email_service.send_generic_email(
                 admin_emails,
-                fail_silently=True
+                admin_subject,
+                admin_text,
+                html_body=admin_html,
             )
-        """Approve device request and create assignment"""
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """Approve a pending device request and create assignment"""
         device_request = self.get_object()
-        
+
         if device_request.status != 'pending':
             return Response({
                 'error': 'Request is not pending'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check if admin/manager
+
         if request.user.role not in ['admin', 'manager']:
             return Response({
                 'error': 'Only admins and managers can approve requests'
             }, status=status.HTTP_403_FORBIDDEN)
-        
-        # Find available device matching the request
+
         device = Device.objects.filter(
             device_type=device_request.device_type,
             status='available'
         ).first()
-        
+
         if not device:
             return Response({
                 'error': 'No available device matches the request'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Create assignment
+
         from datetime import timedelta
-        expected_return_date = timezone.now() + timedelta(days=30)  # Default 30 days
-        
+        expected_return_date = timezone.now() + timedelta(days=30)
+
         assignment = Assignment.objects.create(
             device=device,
             employee=device_request.requested_by,
@@ -539,65 +504,47 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
             expected_return_date=expected_return_date,
             status='approved'
         )
-        
-        # Update request
+
         device_request.status = 'approved'
         device_request.approved_at = timezone.now()
         device_request.approved_by = request.user
         device_request.save()
-        
-        # Send email notifications
+
         subject = f"Device Request Approved - {device_request.device_type}"
-        message = f"""
-        Dear {device_request.requested_by.full_name},
-
-        Your device request has been approved.
-
-        Device Type: {device_request.device_type}
-        Brand: {device_request.brand or 'N/A'}
-        Model: {device_request.model or 'N/A'}
-        Approved By: {request.user.full_name}
-        Approved At: {device_request.approved_at}
-
-        Please proceed with the assignment formalities.
-
-        Best regards,
-        Inventory Management System
+        html_body = f"""
+        <p>Dear {device_request.requested_by.full_name},</p>
+        <p>Your device request has been approved.</p>
+        <p><strong>Device Type:</strong> {device_request.device_type}</p>
+        <p><strong>Brand:</strong> {device_request.brand or 'N/A'}</p>
+        <p><strong>Model:</strong> {device_request.model or 'N/A'}</p>
+        <p><strong>Approved By:</strong> {request.user.full_name}</p>
+        <p><strong>Approved At:</strong> {device_request.approved_at}</p>
+        <p>Please proceed with the assignment formalities.</p>
+        <p>Best regards,<br/>Inventory Management System</p>
         """
-        
-        # Send to user
-        send_mail(
-            subject,
-            message,
-            settings.DEFAULT_FROM_EMAIL,
+        text_body = f"Your device request has been approved by {request.user.full_name}."
+
+        email_service.send_generic_email(
             [device_request.requested_by.email],
-            fail_silently=True
+            subject,
+            text_body,
+            html_body=html_body,
         )
-        
-        # Send to admin
-        admin_message = f"""
-        Device request approved.
 
-        Requested By: {device_request.requested_by.full_name} ({device_request.requested_by.email})
-        Device Type: {device_request.device_type}
-        Assignment ID: {assignment.id}
-        """
-        
-        send_mail(
+        admin_message = f"Device request approved for {device_request.requested_by.full_name}. Assignment ID: {assignment.id}."
+        email_service.send_generic_email(
+            [request.user.email],
             f"Device Request Approved - {device_request.requested_by.full_name}",
             admin_message,
-            settings.DEFAULT_FROM_EMAIL,
-            [request.user.email],
-            fail_silently=True
         )
-        
+
         serializer = self.get_serializer(device_request)
         return Response({
             'message': 'Device request approved and assignment created',
             'request': serializer.data,
             'assignment_id': str(assignment.id)
         })
-    
+
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         """Reject device request"""
