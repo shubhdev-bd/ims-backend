@@ -163,7 +163,7 @@ class DeviceRequestSerializer(serializers.ModelSerializer):
             'approved_at', 'approved_by', 'approved_by_details',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'approved_at', 'approved_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'requested_by', 'approved_at', 'approved_by', 'approved_by_details', 'created_at', 'updated_at']
 
 
 class DeviceRequestListSerializer(serializers.ModelSerializer):
