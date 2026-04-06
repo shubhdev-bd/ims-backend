@@ -6,6 +6,7 @@ from typing import List, Optional, Tuple, Union
 
 import requests
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,18 @@ class InventoryEmailService:
             'from_email': from_email or settings.DEFAULT_FROM_EMAIL,
         }, None
 
+    def _send_django_email(self, subject, body, html_body, recipients, from_email):
+        message = EmailMultiAlternatives(
+            subject=subject,
+            body=body,
+            from_email=from_email,
+            to=recipients,
+        )
+        if html_body and html_body != body:
+            message.attach_alternative(html_body, 'text/html')
+        message.send(fail_silently=False)
+        return {'success': True, 'message': 'Email sent via Django email backend', 'fallback': True}
+
     def send_generic_email(
         self,
         to_emails: Union[str, List[str]],
@@ -138,7 +151,29 @@ class InventoryEmailService:
             logger.error(error['error'])
             return error
 
-        return _send_apps_script_request(payload)
+        result = _send_apps_script_request(payload)
+        if not result.get('success'):
+            error_message = result.get('error', '')
+            logger.warning(
+                'Apps Script generic email failed, falling back to Django email backend: %s',
+                error_message,
+            )
+            try:
+                return self._send_django_email(
+                    subject,
+                    body,
+                    html_body or body,
+                    self._normalize_recipients(to_emails),
+                    from_email or settings.DEFAULT_FROM_EMAIL,
+                )
+            except Exception as exc:
+                logger.error('Django email fallback failed: %s', exc)
+                return {
+                    'success': False,
+                    'error': f"Email sending failed: {error_message} | Django fallback failed: {exc}",
+                }
+
+        return result
 
     def send_ticket_created_email(self, ticket):
         subject = f"New Ticket Submitted: {ticket.subject or ticket.ticket_number}"
