@@ -12,12 +12,19 @@ class Device(models.Model):
     DEVICE_TYPE_CHOICES = [
         ('laptop', 'Laptop'),
         ('desktop', 'Desktop'),
+        ('pc', 'PC'),
         ('monitor', 'Monitor'),
         ('keyboard', 'Keyboard'),
         ('mouse', 'Mouse'),
         ('headset', 'Headset'),
+        ('headphone', 'Headphone'),
         ('phone', 'Phone'),
         ('tablet', 'Tablet'),
+        ('cable', 'Cable'),
+        ('charger', 'Charger'),
+        ('pendrive', 'Pendrive'),
+        ('hard_drive', 'Hard Drive'),
+        ('accessories', 'Accessories'),
         ('other', 'Other'),
     ]
     

@@ -25,7 +25,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'phone_number',
             'is_active',
             'date_joined',
-            'profile_picture',
+            'profile_picture_url',
         ]
         read_only_fields = [
             'id',

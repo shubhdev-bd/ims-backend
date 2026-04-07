@@ -77,7 +77,7 @@ class Employee(AbstractBaseUser, PermissionsMixin):
     last_login = models.DateTimeField(null=True, blank=True)
     
     # Profile
-    profile_picture = models.ImageField(upload_to='profiles/', null=True, blank=True)
+    profile_picture_url = models.URLField(max_length=500, null=True, blank=True, help_text="URL to profile picture from Vercel Blob or similar")
     
     objects = EmployeeManager()
     
