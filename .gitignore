@@ -1,3 +1,5 @@
 .venv
 .Ds_Store
 .env
+_pycache_
+__pycache__
