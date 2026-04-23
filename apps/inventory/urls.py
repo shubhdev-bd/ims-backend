@@ -21,3 +21,11 @@ router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 urlpatterns = [
     path('', include(router.urls)),
 ]
+
+# urls.py
+
+from .views import UploadInventoryView
+
+urlpatterns = [
+    path('upload-inventory/', UploadInventoryView.as_view(), name='upload-inventory'),
+]

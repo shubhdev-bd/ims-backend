@@ -1,12 +1,18 @@
 from django.contrib import admin
 from .models import Device, Assignment, TicketRequest
 
+# @admin.register(Device)
+# class DeviceAdmin(admin.ModelAdmin):
+#     list_display = ['device_id', 'name', 'device_type', 'status', 'condition']
+#     list_filter = ['device_type', 'status', 'condition']
+#     search_fields = ['device_id', 'name', 'brand', 'model']
+
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
-    list_display = ['device_id', 'name', 'device_type', 'status', 'condition']
-    list_filter = ['device_type', 'status', 'condition']
-    search_fields = ['device_id', 'name', 'brand', 'model']
-
+    list_display = ['device_id', 'device_type', 'brand', 'model', 'quantity']
+    list_filter = ['device_type', 'brand']
+    search_fields = ['device_id', 'brand', 'model']
+    
 @admin.register(Assignment)
 class AssignmentAdmin(admin.ModelAdmin):
     list_display = ['device', 'employee', 'assigned_date', 'status']

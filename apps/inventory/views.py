@@ -761,3 +761,82 @@ class DashboardViewSet(viewsets.ViewSet):
         
         serializer = DashboardStatsSerializer(stats_data)
         return Response(serializer.data)
+
+
+# views.py
+
+import json
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Device
+
+
+class UploadInventoryView(APIView):
+
+    def post(self, request):
+        file = request.FILES.get('file')
+
+        if not file:
+            return Response({"error": "No file uploaded"}, status=400)
+
+        try:
+            data = json.load(file)
+        except Exception as e:
+            return Response({"error": "Invalid JSON"}, status=400)
+
+        inventory = data.get("inventory", {})
+        created_devices = []
+
+        def create_device(item, device_type):
+            device_id = item.get("id")
+
+            # Avoid duplicates
+            if Device.objects.filter(device_id=device_id).exists():
+                return None
+
+            # Extract common fields
+            brand = item.get("brand", "")
+            model = item.get("model", "")
+
+            quantity = item.get("quantity", 1)
+
+            # Remove known fields → rest goes to specs
+            excluded_keys = ["id", "brand", "model", "quantity"]
+            specs = {k: v for k, v in item.items() if k not in excluded_keys}
+
+            description = f"{brand} {model} {device_type}".strip()
+
+            device = Device.objects.create(
+                device_id=device_id,
+                device_type=device_type,
+                brand=brand,
+                model=model,
+                specs=specs,
+                description=description,
+                quantity=quantity
+            )
+
+            return device
+
+        # 🔥 Mapping JSON keys → model types
+        mapping = {
+            "laptops": "laptop",
+            "mouse": "mouse",
+            "keyboards": "keyboard",
+            "sim_cards": "sim",
+            "pc_setups": "pc",
+            "headphones": "headphone"
+        }
+
+        for key, device_type in mapping.items():
+            items = inventory.get(key, [])
+            for item in items:
+                device = create_device(item, device_type)
+                if device:
+                    created_devices.append(device.device_id)
+
+        return Response({
+            "message": "Inventory uploaded successfully",
+            "created_devices": created_devices
+        }, status=status.HTTP_201_CREATED)

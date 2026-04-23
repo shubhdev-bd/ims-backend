@@ -208,3 +208,14 @@ class DashboardStatsSerializer(serializers.Serializer):
     device_by_type = serializers.DictField()
     recent_assignments = AssignmentListSerializer(many=True)
     recent_tickets = TicketRequestListSerializer(many=True)
+
+
+# serializers.py
+
+from rest_framework import serializers
+from .models import Device
+
+class DeviceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Device
+        fields = '__all__'
