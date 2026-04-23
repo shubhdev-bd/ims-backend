@@ -71,10 +71,12 @@ class Employee(AbstractBaseUser, PermissionsMixin):
     # Status
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    email_verified = models.BooleanField(default=False)
     
     # Timestamps
     date_joined = models.DateTimeField(default=timezone.now)
     last_login = models.DateTimeField(null=True, blank=True)
+    email_verified_at = models.DateTimeField(null=True, blank=True)
     
     # Profile
     profile_picture_url = models.URLField(max_length=500, null=True, blank=True, help_text="URL to profile picture from Vercel Blob or similar")
@@ -131,3 +133,26 @@ class PasswordResetToken(models.Model):
     def is_valid(self):
         """Check if token is still valid"""
         return not self.is_used and timezone.now() < self.expires_at
+
+
+class EmailOTP(models.Model):
+    """Model to store OTP for email verification"""
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee = models.OneToOneField(Employee, on_delete=models.CASCADE, related_name='email_otp')
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_verified = models.BooleanField(default=False)
+    attempt_count = models.IntegerField(default=0)
+    
+    class Meta:
+        db_table = 'email_otps'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"OTP for {self.employee.email}"
+    
+    def is_valid(self):
+        """Check if OTP is still valid"""
+        return not self.is_verified and timezone.now() < self.expires_at and self.attempt_count < 5

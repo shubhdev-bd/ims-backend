@@ -298,3 +298,101 @@ def send_password_changed_email(employee):
         html_content,
         text_content
     )
+
+
+def generate_otp():
+    """Generate a 6-digit OTP"""
+    import random
+    return ''.join([str(random.randint(0, 9)) for _ in range(6)])
+
+
+def create_email_otp(employee):
+    """Create OTP for email verification"""
+    from .models import EmailOTP
+    
+    # Delete existing OTP if any
+    EmailOTP.objects.filter(employee=employee).delete()
+    
+    # Generate OTP
+    otp = generate_otp()
+    expires_at = timezone.now() + timedelta(minutes=10)
+    
+    email_otp = EmailOTP.objects.create(
+        employee=employee,
+        otp=otp,
+        expires_at=expires_at
+    )
+    
+    return email_otp
+
+
+def send_otp_email(employee, otp_obj):
+    """Send OTP to employee email"""
+    subject = "Email Verification - OTP for Inventory Management System"
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+            .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }}
+            .otp-box {{ background: white; border: 2px solid #667eea; padding: 20px; text-align: center; border-radius: 10px; margin: 20px 0; }}
+            .otp-code {{ font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #667eea; font-family: 'Courier New', monospace; }}
+            .timer {{ color: #f59e0b; font-weight: bold; }}
+            .footer {{ text-align: center; margin-top: 20px; color: #666; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Email Verification</h1>
+            </div>
+            <div class="content">
+                <p>Hi {employee.first_name},</p>
+                <p>Your One-Time Password (OTP) for email verification is:</p>
+                
+                <div class="otp-box">
+                    <div class="otp-code">{otp_obj.otp}</div>
+                    <p class="timer">⏱️ This OTP will expire in 10 minutes</p>
+                </div>
+                
+                <p><strong>Do not share this OTP with anyone.</strong></p>
+                
+                <p>If you did not request this OTP, please ignore this email and your account will be deactivated.</p>
+                
+                <p>Best regards,<br>IMS Team</p>
+            </div>
+            <div class="footer">
+                <p>© 2024 Inventory Management System. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    text_content = f"""
+    Email Verification - OTP
+    
+    Hi {employee.first_name},
+    
+    Your OTP for email verification is: {otp_obj.otp}
+    
+    This OTP will expire in 10 minutes.
+    
+    Do not share this OTP with anyone.
+    
+    If you did not request this OTP, please ignore this email.
+    
+    Best regards,
+    IMS Team
+    """
+    
+    return send_email_via_apps_script(
+        employee.email,
+        subject,
+        html_content,
+        text_content
+    )

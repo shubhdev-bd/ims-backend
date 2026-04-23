@@ -286,6 +286,151 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         assignments = self.queryset.filter(employee=request.user, status='active')
         serializer = AssignmentListSerializer(assignments, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def grant_device(self, request, pk=None):
+        """Grant device to user and send notification emails"""
+        assignment = self.get_object()
+        
+        if request.user.role not in ['admin', 'manager']:
+            return Response({
+                'error': 'Only admins and managers can grant devices'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        if assignment.status not in ['active', 'consent_pending']:
+            return Response({
+                'error': 'Assignment must be active or consent pending to grant'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        assignment.status = 'active'
+        assignment.save()
+        
+        # Send grant email to all recipients
+        from django.conf import settings
+        
+        recipients = {
+            'employee': assignment.employee.email,
+            'admin_recipients': settings.ADMIN_EMAIL_RECIPIENTS if hasattr(settings, 'ADMIN_EMAIL_RECIPIENTS') else []
+        }
+        
+        # Build email content
+        subject = f"Device Assignment Notification - {assignment.device.device_id}"
+        
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; }}
+                .header {{ background-color: #2c3e50; color: white; padding: 20px; text-align: center; }}
+                .content {{ background-color: white; padding: 20px; }}
+                .device-info {{ background-color: #ecf0f1; padding: 15px; border-radius: 5px; margin: 15px 0; }}
+                .footer {{ text-align: center; color: #7f8c8d; padding: 20px; font-size: 12px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Device Assignment Notification</h1>
+                </div>
+                <div class="content">
+                    <p>Dear {assignment.employee.full_name},</p>
+                    
+                    <p>Your device request has been approved and the following device has been assigned to you:</p>
+                    
+                    <div class="device-info">
+                        <h3>Device Details</h3>
+                        <p><strong>Device ID:</strong> {assignment.device.device_id}</p>
+                        <p><strong>Device Type:</strong> {assignment.device.device_type.title()}</p>
+                        <p><strong>Brand & Model:</strong> {assignment.device.brand} {assignment.device.model}</p>
+                        <p><strong>Condition:</strong> {assignment.device.condition.title()}</p>
+                        <p><strong>Assignment Date:</strong> {assignment.assigned_date.strftime('%d-%b-%Y %H:%M')}</p>
+                        <p><strong>Expected Return Date:</strong> {assignment.expected_return_date.strftime('%d-%b-%Y') if assignment.expected_return_date else 'Not specified'}</p>
+                    </div>
+                    
+                    <h3>Important Terms:</h3>
+                    <ul>
+                        <li>Device remains the property of {settings.COMPANY_NAME if hasattr(settings, 'COMPANY_NAME') else 'the organization'}</li>
+                        <li>Device must be returned in good condition</li>
+                        <li>Report any issues immediately to the IT department</li>
+                        <li>Unauthorized modifications are not permitted</li>
+                        <li>Device must not be shared with third parties</li>
+                    </ul>
+                    
+                    <p>Please confirm receipt and device condition. Contact your admin if you have any questions.</p>
+                    
+                    <p>Best regards,<br/>
+                    <strong>Inventory Management System</strong></p>
+                </div>
+                <div class="footer">
+                    <p>This is an automated notification. Please do not reply to this email.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        text_body = f"""
+        Device Assignment Notification
+        
+        Dear {assignment.employee.full_name},
+        
+        Your device request has been approved and the following device has been assigned to you:
+        
+        Device Details:
+        - Device ID: {assignment.device.device_id}
+        - Device Type: {assignment.device.device_type.title()}
+        - Brand & Model: {assignment.device.brand} {assignment.device.model}
+        - Assignment Date: {assignment.assigned_date.strftime('%d-%b-%Y %H:%M')}
+        - Expected Return Date: {assignment.expected_return_date.strftime('%d-%b-%Y') if assignment.expected_return_date else 'Not specified'}
+        
+        Important Terms:
+        - Device remains the property of the organization
+        - Device must be returned in good condition
+        - Report any issues immediately
+        
+        Best regards,
+        Inventory Management System
+        """
+        
+        # Send to employee
+        email_service.send_generic_email(
+            [recipients['employee']],
+            subject,
+            text_body,
+            html_body=html_body
+        )
+        
+        # Send to admin recipients
+        admin_cc_recipients = recipients['admin_recipients']
+        if admin_cc_recipients:
+            admin_subject = f"Device Grant Notification - {assignment.employee.full_name} ({assignment.device.device_id})"
+            admin_html = f"""
+            <p>A device has been granted to the following employee:</p>
+            <p><strong>Employee:</strong> {assignment.employee.full_name}</p>
+            <p><strong>Employee ID:</strong> {assignment.employee.employee_id}</p>
+            <p><strong>Email:</strong> {assignment.employee.email}</p>
+            <p><strong>Device ID:</strong> {assignment.device.device_id}</p>
+            <p><strong>Device:</strong> {assignment.device.brand} {assignment.device.model}</p>
+            <p><strong>Grant Date:</strong> {timezone.now().strftime('%d-%b-%Y %H:%M')}</p>
+            <p>Please keep this record for your reference.</p>
+            """
+            admin_text = f"Device {assignment.device.device_id} granted to {assignment.employee.full_name} ({assignment.employee.email})"
+            
+            email_service.send_generic_email(
+                admin_cc_recipients,
+                admin_subject,
+                admin_text,
+                html_body=admin_html
+            )
+        
+        serializer = self.get_serializer(assignment)
+        return Response({
+            'message': 'Device granted successfully and notifications sent',
+            'assignment': serializer.data,
+            'emails_sent_to': [recipients['employee']] + admin_cc_recipients
+        })
 
 
 class TicketRequestViewSet(viewsets.ModelViewSet):

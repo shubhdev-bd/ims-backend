@@ -14,7 +14,9 @@ from .serializers import (
     LoginSerializer,
     PasswordResetRequestSerializer,
     PasswordResetConfirmSerializer,
-    ChangePasswordSerializer
+    ChangePasswordSerializer,
+    VerifyEmailOTPSerializer,
+    ChangePasswordAfterOTPSerializer
 )
 from .permissions import IsAdmin
 from .serializers import EmployeeSerializer, EmployeeCreateUpdateSerializer
@@ -325,3 +327,93 @@ class EmployeeDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save()
+
+
+class SendOTPView(APIView):
+    """Send OTP to employee email"""
+    
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        """Send OTP to email"""
+        email = request.data.get('email')
+        
+        if not email:
+            return Response({
+                'error': 'Email is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            employee = Employee.objects.get(email=email, is_active=True)
+            
+            # Check if email is already verified
+            if employee.email_verified:
+                return Response({
+                    'message': 'Email is already verified'
+                }, status=status.HTTP_200_OK)
+            
+            # Create and send OTP
+            from .utils import create_email_otp, send_otp_email
+            otp_obj = create_email_otp(employee)
+            send_otp_email(employee, otp_obj)
+            
+            return Response({
+                'message': 'OTP has been sent to your email',
+                'email': email
+            }, status=status.HTTP_200_OK)
+            
+        except Employee.DoesNotExist:
+            return Response({
+                'error': 'No account found with this email'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+
+class VerifyEmailOTPView(APIView):
+    """Verify email with OTP"""
+    
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        """Verify OTP and mark email as verified"""
+        serializer_class = VerifyEmailOTPSerializer
+        serializer = serializer_class(data=request.data)
+        
+        if serializer.is_valid():
+            employee = serializer.validated_data['employee']
+            employee_serializer = EmployeeSerializer(employee)
+            
+            return Response({
+                'message': 'Email verified successfully',
+                'employee': employee_serializer.data
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ChangePasswordAfterOTPView(APIView):
+    """Change password after OTP verification"""
+    
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        """Change password with OTP verification"""
+        serializer_class = ChangePasswordAfterOTPSerializer
+        serializer = serializer_class(data=request.data)
+        
+        if serializer.is_valid():
+            employee = serializer.save()
+            employee_serializer = EmployeeSerializer(employee)
+            
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(employee)
+            
+            return Response({
+                'message': 'Password changed successfully',
+                'employee': employee_serializer.data,
+                'tokens': {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                }
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

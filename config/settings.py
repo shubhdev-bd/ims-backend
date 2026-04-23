@@ -221,6 +221,17 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # For development
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@inventory.com')
 
+# Admin Email Recipients for Device Grant Notifications
+ADMIN_EMAIL_RECIPIENTS = [
+    'jagruti@believersdestination.com',
+    'kunal@believersdestination.com',
+    'varun@believersdestination.com',
+    'chahat.gupta@believersdestination.com',
+]
+
+# Company Name for Email Templates
+COMPANY_NAME = 'Believers Destination'
+
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = False  # Render handles SSL termination

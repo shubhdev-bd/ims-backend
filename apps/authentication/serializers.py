@@ -4,6 +4,7 @@ Authentication Serializers
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import authenticate
+from django.utils import timezone
 from .models import Employee
 
 
@@ -224,3 +225,132 @@ class EmployeeCreateUpdateSerializer(serializers.ModelSerializer):
             instance.set_password(password)
         instance.save()
         return instance
+
+
+class VerifyEmailOTPSerializer(serializers.Serializer):
+    """Serializer for verifying email OTP"""
+    
+    email = serializers.EmailField(required=True)
+    otp = serializers.CharField(required=True, max_length=6)
+    
+    def validate_otp(self, value):
+        """Validate OTP format"""
+        if not value.isdigit():
+            raise serializers.ValidationError("OTP must be numeric")
+        if len(value) != 6:
+            raise serializers.ValidationError("OTP must be 6 digits")
+        return value
+    
+    def validate(self, attrs):
+        """Validate OTP against employee"""
+        email = attrs.get('email')
+        otp = attrs.get('otp')
+        
+        try:
+            employee = Employee.objects.get(email=email, is_active=True)
+        except Employee.DoesNotExist:
+            raise serializers.ValidationError("Invalid email address")
+        
+        try:
+            from .models import EmailOTP
+            email_otp = EmailOTP.objects.get(employee=employee)
+        except EmailOTP.DoesNotExist:
+            raise serializers.ValidationError("No OTP found for this email")
+        
+        # Check if OTP is valid
+        if not email_otp.is_valid():
+            raise serializers.ValidationError("OTP has expired or already used")
+        
+        # Check OTP
+        if email_otp.otp != otp:
+            email_otp.attempt_count += 1
+            email_otp.save()
+            if email_otp.attempt_count >= 5:
+                email_otp.delete()
+            raise serializers.ValidationError("Invalid OTP")
+        
+        # Mark as verified
+        email_otp.is_verified = True
+        email_otp.save()
+        
+        # Mark employee email as verified
+        employee.email_verified = True
+        employee.email_verified_at = timezone.now()
+        employee.save()
+        
+        attrs['employee'] = employee
+        return attrs
+
+
+class ChangePasswordAfterOTPSerializer(serializers.Serializer):
+    """Serializer for changing password after OTP verification"""
+    
+    email = serializers.EmailField(required=True)
+    otp = serializers.CharField(required=True, max_length=6)
+    new_password = serializers.CharField(
+        required=True,
+        write_only=True,
+        validators=[validate_password],
+        style={'input_type': 'password'}
+    )
+    new_password_confirm = serializers.CharField(
+        required=True,
+        write_only=True,
+        style={'input_type': 'password'}
+    )
+    
+    def validate(self, attrs):
+        """Validate passwords match and OTP"""
+        email = attrs.get('email')
+        otp = attrs.get('otp')
+        new_password = attrs.get('new_password')
+        new_password_confirm = attrs.get('new_password_confirm')
+        
+        # Validate passwords match
+        if new_password != new_password_confirm:
+            raise serializers.ValidationError({
+                "new_password": "Password fields didn't match."
+            })
+        
+        # Validate OTP
+        try:
+            employee = Employee.objects.get(email=email, is_active=True)
+        except Employee.DoesNotExist:
+            raise serializers.ValidationError("Invalid email address")
+        
+        try:
+            from .models import EmailOTP
+            email_otp = EmailOTP.objects.get(employee=employee)
+        except EmailOTP.DoesNotExist:
+            raise serializers.ValidationError("No OTP found for this email")
+        
+        if not email_otp.is_valid():
+            raise serializers.ValidationError("OTP has expired or already used")
+        
+        if email_otp.otp != otp:
+            email_otp.attempt_count += 1
+            email_otp.save()
+            raise serializers.ValidationError("Invalid OTP")
+        
+        attrs['employee'] = employee
+        attrs['email_otp'] = email_otp
+        return attrs
+    
+    def save(self):
+        """Save new password"""
+        employee = self.validated_data['employee']
+        email_otp = self.validated_data['email_otp']
+        new_password = self.validated_data['new_password']
+        
+        employee.set_password(new_password)
+        employee.email_verified = True
+        employee.email_verified_at = timezone.now()
+        employee.save()
+        
+        email_otp.is_verified = True
+        email_otp.save()
+        
+        from .utils import send_password_changed_email
+        send_password_changed_email(employee)
+        
+        return employee
