@@ -57,6 +57,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
     device_details = DeviceListSerializer(source='device', read_only=True)
     employee_details = EmployeeSerializer(source='employee', read_only=True)
     assigned_by_name = serializers.SerializerMethodField()
+    return_form_pending = serializers.SerializerMethodField()
     
     class Meta:
         model = Assignment
@@ -68,7 +69,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
             'consent_form_data', 'consent_images', 'consent_approved',
             'consent_approved_at', 'consent_approved_by',
             'return_form_data', 'return_images', 'return_approved',
-            'return_approved_at', 'return_approved_by'
+            'return_approved_at', 'return_approved_by', 'return_form_pending'
         ]
         read_only_fields = ['id', 'assigned_date', 'assigned_by', 'consent_approved_at', 'consent_approved_by', 'return_approved_at', 'return_approved_by']
     
@@ -76,6 +77,9 @@ class AssignmentSerializer(serializers.ModelSerializer):
         if obj.assigned_by:
             return obj.assigned_by.full_name
         return None
+
+    def get_return_form_pending(self, obj):
+        return bool(obj.return_form_data) and not obj.return_approved
     
     def validate(self, attrs):
         """Validate assignment data"""
@@ -154,6 +158,7 @@ class DeviceRequestSerializer(serializers.ModelSerializer):
     
     requested_by_details = EmployeeSerializer(source='requested_by', read_only=True)
     approved_by_details = EmployeeSerializer(source='approved_by', read_only=True)
+    assignment_details = AssignmentSerializer(source='assignment', read_only=True)
     
     class Meta:
         model = DeviceRequest
@@ -161,9 +166,10 @@ class DeviceRequestSerializer(serializers.ModelSerializer):
             'id', 'requested_by', 'requested_by_details', 'device_type',
             'brand', 'model', 'specifications', 'reason', 'status',
             'approved_at', 'approved_by', 'approved_by_details',
+            'assignment', 'assignment_details',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'requested_by', 'approved_at', 'approved_by', 'approved_by_details', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'requested_by', 'approved_at', 'approved_by', 'approved_by_details', 'assignment', 'assignment_details', 'created_at', 'updated_at']
 
 
 class DeviceRequestListSerializer(serializers.ModelSerializer):

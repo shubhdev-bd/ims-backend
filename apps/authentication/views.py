@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import logout
+from django.utils import timezone
 from .models import Employee, PasswordResetToken
 from .serializers import (
     EmployeeSerializer,
@@ -80,6 +81,7 @@ class LoginView(APIView):
         refresh = RefreshToken.for_user(employee)
         
         # Update last login
+        employee.last_login = timezone.now()
         employee.save(update_fields=['last_login'])
         
         # Return employee data with tokens

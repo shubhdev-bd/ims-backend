@@ -4,6 +4,7 @@ Authentication Models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.db import models
 from django.utils import timezone
+from django.utils.text import slugify
 import uuid
 
 
@@ -56,6 +57,7 @@ class Employee(AbstractBaseUser, PermissionsMixin):
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True, db_index=True)
+    username = models.CharField(max_length=150, unique=True, db_index=True)
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     employee_id = models.CharField(max_length=20, unique=True, blank=True, null=True)
@@ -94,6 +96,35 @@ class Employee(AbstractBaseUser, PermissionsMixin):
     
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.email})"
+
+    def _build_username_base(self):
+        """Build a readable username from the employee's name."""
+        name_parts = [
+            (self.first_name or "").strip(),
+            (self.last_name or "").strip(),
+        ]
+        full_name = " ".join(part for part in name_parts if part)
+        if full_name:
+            return slugify(full_name).replace("-", ".")
+        if self.email:
+            return self.email.split("@", 1)[0].lower()
+        if self.employee_id:
+            return self.employee_id.lower()
+        return f"user.{str(self.id)[:8]}"
+
+    def generate_unique_username(self):
+        """Generate a unique username for login."""
+        base_username = self._build_username_base().strip(".") or "user"
+        base_username = base_username[:140]
+        candidate = base_username
+        suffix = 1
+
+        while Employee.objects.exclude(pk=self.pk).filter(username__iexact=candidate).exists():
+            suffix_text = str(suffix)
+            candidate = f"{base_username[:150 - len(suffix_text)]}{suffix_text}"
+            suffix += 1
+
+        return candidate.lower()
     
     @property
     def full_name(self):
@@ -110,6 +141,11 @@ class Employee(AbstractBaseUser, PermissionsMixin):
                 self.employee_id = f"EMP{str(last_id + 1).zfill(3)}"
             else:
                 self.employee_id = "EMP001"
+
+        if self.username:
+            self.username = self.username.strip().lower()
+        else:
+            self.username = self.generate_unique_username()
         super().save(*args, **kwargs)
 
 

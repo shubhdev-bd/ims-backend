@@ -4,9 +4,9 @@ from .models import Employee, PasswordResetToken
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ['employee_id', 'email', 'full_name', 'role', 'department', 'is_active']
+    list_display = ['employee_id', 'username', 'email', 'full_name', 'role', 'department', 'is_active']
     list_filter = ['role', 'department', 'is_active']
-    search_fields = ['email', 'first_name', 'last_name', 'employee_id']
+    search_fields = ['username', 'email', 'first_name', 'last_name', 'employee_id']
     ordering = ['-date_joined']
 
 @admin.register(PasswordResetToken)

@@ -550,8 +550,6 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
     
     def get_serializer_class(self):
-        if self.action == 'list':
-            return DeviceRequestListSerializer
         return DeviceRequestSerializer
     
     def get_queryset(self):
@@ -614,11 +612,7 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
                 html_body=admin_html,
             )
 
-    @action(detail=True, methods=['post'])
-    def approve(self, request, pk=None):
-        """Approve a pending device request and create assignment"""
-        device_request = self.get_object()
-
+    def _grant_device_request(self, request, device_request):
         if device_request.status != 'pending':
             return Response({
                 'error': 'Request is not pending'
@@ -626,7 +620,7 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
 
         if request.user.role not in ['admin', 'manager']:
             return Response({
-                'error': 'Only admins and managers can approve requests'
+                'error': 'Only admins and managers can grant devices'
             }, status=status.HTTP_403_FORBIDDEN)
 
         device = Device.objects.filter(
@@ -640,7 +634,7 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         from datetime import timedelta
-        expected_return_date = timezone.now() + timedelta(days=30)
+        expected_return_date = timezone.now().date() + timedelta(days=30)
 
         assignment = Assignment.objects.create(
             device=device,
@@ -653,42 +647,27 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
         device_request.status = 'approved'
         device_request.approved_at = timezone.now()
         device_request.approved_by = request.user
-        device_request.save()
+        device_request.assignment = assignment
+        device_request.save(update_fields=['status', 'approved_at', 'approved_by', 'assignment', 'updated_at'])
 
-        subject = f"Device Request Approved - {device_request.device_type}"
-        html_body = f"""
-        <p>Dear {device_request.requested_by.full_name},</p>
-        <p>Your device request has been approved.</p>
-        <p><strong>Device Type:</strong> {device_request.device_type}</p>
-        <p><strong>Brand:</strong> {device_request.brand or 'N/A'}</p>
-        <p><strong>Model:</strong> {device_request.model or 'N/A'}</p>
-        <p><strong>Approved By:</strong> {request.user.full_name}</p>
-        <p><strong>Approved At:</strong> {device_request.approved_at}</p>
-        <p>Please proceed with the assignment formalities.</p>
-        <p>Best regards,<br/>Inventory Management System</p>
-        """
-        text_body = f"Your device request has been approved by {request.user.full_name}."
-
-        email_service.send_generic_email(
-            [device_request.requested_by.email],
-            subject,
-            text_body,
-            html_body=html_body,
-        )
-
-        admin_message = f"Device request approved for {device_request.requested_by.full_name}. Assignment ID: {assignment.id}."
-        email_service.send_generic_email(
-            [request.user.email],
-            f"Device Request Approved - {device_request.requested_by.full_name}",
-            admin_message,
-        )
+        email_service.send_device_grant_email(assignment, granted_by=request.user)
 
         serializer = self.get_serializer(device_request)
         return Response({
-            'message': 'Device request approved and assignment created',
+            'message': 'Device granted successfully',
             'request': serializer.data,
             'assignment_id': str(assignment.id)
         })
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """Backward-compatible alias for granting a device to a pending request."""
+        return self._grant_device_request(request, self.get_object())
+
+    @action(detail=True, methods=['post'])
+    def grant(self, request, pk=None):
+        """Grant a device for a pending request and notify stakeholders."""
+        return self._grant_device_request(request, self.get_object())
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):

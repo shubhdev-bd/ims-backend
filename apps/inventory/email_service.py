@@ -311,5 +311,67 @@ class InventoryEmailService:
         payload['type'] = 'consent_approved'
         return _send_apps_script_request(payload)
 
+    def send_device_grant_email(self, assignment, granted_by=None):
+        if not assignment or not assignment.employee or not assignment.device:
+            return {'success': False, 'error': 'Assignment with employee and device is required'}
+
+        subject = f"Device Granted - {assignment.device.device_id}"
+        html_body = f"""
+        <p>Dear {assignment.employee.full_name},</p>
+        <p>Your device request has been approved and a device has been granted to you.</p>
+        <p><strong>Device ID:</strong> {assignment.device.device_id}</p>
+        <p><strong>Device:</strong> {assignment.device.brand} {assignment.device.model}</p>
+        <p><strong>Type:</strong> {assignment.device.device_type}</p>
+        <p><strong>Granted By:</strong> {granted_by.full_name if granted_by else assignment.assigned_by.full_name if assignment.assigned_by else 'Admin'}</p>
+        <p><strong>Expected Return Date:</strong> {assignment.expected_return_date or 'Not specified'}</p>
+        <p>Please complete the undertaking and consent steps in the IMS portal.</p>
+        <p>Best regards,<br/>Inventory Management System</p>
+        """
+        text_body = (
+            f"Device granted: {assignment.device.device_id}\n"
+            f"Device: {assignment.device.brand} {assignment.device.model}\n"
+            f"Please complete the undertaking and consent steps in the IMS portal."
+        )
+
+        employee_result = self.send_generic_email(
+            assignment.employee.email,
+            subject,
+            text_body,
+            html_body=html_body,
+        )
+
+        admin_recipients = list(getattr(settings, 'ADMIN_EMAIL_RECIPIENTS', []))
+        if granted_by and granted_by.email:
+            admin_recipients.append(granted_by.email)
+        admin_recipients = sorted(set(admin_recipients))
+
+        admin_result = {'success': True, 'skipped': True}
+        if admin_recipients:
+            admin_subject = f"Device Grant Recorded - {assignment.employee.full_name}"
+            admin_html = f"""
+            <p>A device grant has been recorded in IMS.</p>
+            <p><strong>Employee:</strong> {assignment.employee.full_name}</p>
+            <p><strong>Employee Email:</strong> {assignment.employee.email}</p>
+            <p><strong>Device ID:</strong> {assignment.device.device_id}</p>
+            <p><strong>Device:</strong> {assignment.device.brand} {assignment.device.model}</p>
+            <p><strong>Granted By:</strong> {granted_by.full_name if granted_by else assignment.assigned_by.full_name if assignment.assigned_by else 'Admin'}</p>
+            """
+            admin_text = (
+                f"Device {assignment.device.device_id} granted to "
+                f"{assignment.employee.full_name} ({assignment.employee.email})."
+            )
+            admin_result = self.send_generic_email(
+                admin_recipients,
+                admin_subject,
+                admin_text,
+                html_body=admin_html,
+            )
+
+        return {
+            'success': employee_result.get('success', False) and admin_result.get('success', True),
+            'employee_email': employee_result,
+            'admin_email': admin_result,
+        }
+
 
 email_service = InventoryEmailService()

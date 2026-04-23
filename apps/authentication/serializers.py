@@ -3,7 +3,6 @@ Authentication Serializers
 """
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from django.contrib.auth import authenticate
 from django.utils import timezone
 from .models import Employee
 
@@ -16,6 +15,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'email',
+            'username',
             'first_name',
             'last_name',
             'full_name',
@@ -25,6 +25,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'department',
             'phone_number',
             'is_active',
+            'email_verified',
+            'email_verified_at',
             'date_joined',
             'profile_picture_url',
         ]
@@ -83,46 +85,56 @@ class SignupSerializer(serializers.ModelSerializer):
 
 class LoginSerializer(serializers.Serializer):
     """Serializer for employee login"""
-    
-    email = serializers.EmailField(required=True)
+
+    login = serializers.CharField(required=False)
+    email = serializers.EmailField(required=False)
+    admin_only = serializers.BooleanField(required=False, default=False)
     password = serializers.CharField(
         required=True,
         write_only=True,
         style={'input_type': 'password'}
     )
-    
+
     def validate(self, attrs):
         """Validate credentials"""
-        email = attrs.get('email')
+        login_identifier = attrs.get('login') or attrs.get('email')
         password = attrs.get('password')
-        
-        if email and password:
-            # Authenticate user
-            user = authenticate(
-                request=self.context.get('request'),
-                username=email,
-                password=password
-            )
-            
-            if not user:
-                raise serializers.ValidationError(
-                    'Unable to log in with provided credentials.',
-                    code='authorization'
-                )
-            
-            if not user.is_active:
-                raise serializers.ValidationError(
-                    'User account is disabled.',
-                    code='authorization'
-                )
-            
-            attrs['user'] = user
-            return attrs
-        else:
+        admin_only = attrs.get('admin_only', False)
+
+        if not login_identifier or not password:
             raise serializers.ValidationError(
-                'Must include "email" and "password".',
+                'Must include "login" and "password".',
                 code='authorization'
             )
+
+        login_identifier = login_identifier.strip()
+
+        if '@' in login_identifier:
+            user = Employee.objects.filter(email__iexact=login_identifier).first()
+        else:
+            user = Employee.objects.filter(username__iexact=login_identifier).first()
+
+        if not user or not user.check_password(password):
+            raise serializers.ValidationError(
+                'Unable to log in with provided credentials.',
+                code='authorization'
+            )
+
+        if not user.is_active:
+            raise serializers.ValidationError(
+                'User account is disabled.',
+                code='authorization'
+            )
+
+        if admin_only and user.role != 'admin':
+            raise serializers.ValidationError(
+                'This login page is for admin accounts only.',
+                code='authorization'
+            )
+
+        attrs['user'] = user
+        attrs['login'] = login_identifier
+        return attrs
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
@@ -200,6 +212,7 @@ class EmployeeCreateUpdateSerializer(serializers.ModelSerializer):
         model = Employee
         fields = [
             'email',
+            'username',
             'first_name',
             'last_name',
             'role',
@@ -208,6 +221,11 @@ class EmployeeCreateUpdateSerializer(serializers.ModelSerializer):
             'is_active',
             'password',
         ]
+
+    def validate_username(self, value):
+        if not value:
+            return value
+        return value.strip().lower()
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)
