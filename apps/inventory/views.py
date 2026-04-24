@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q, Count
 from django.utils import timezone
 from django.conf import settings
+from urllib3 import request
 from .email_service import email_service
 from .serializers import (
     DeviceSerializer,
@@ -23,6 +24,11 @@ from .serializers import (
 from .permissions import IsAdminOrReadOnly, IsAdminOrManager
 from .models import Device, Assignment, TicketRequest, DeviceRequest
 from apps.authentication.models import Employee
+
+from django.shortcuts import render
+
+def home(request):
+    return render(request, 'index.html')
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
@@ -103,45 +109,46 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
 
 class AssignmentViewSet(viewsets.ModelViewSet):
-    """ViewSet for Assignment model"""
-    
     queryset = Assignment.objects.all()
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['device__device_id', 'device__name', 'employee__first_name', 'employee__last_name']
     ordering_fields = ['assigned_date', 'return_date']
     ordering = ['-assigned_date']
-    
+
     def get_serializer_class(self):
         if self.action == 'list':
             return AssignmentListSerializer
         return AssignmentSerializer
-    
-    def get_queryset(self):
+
+    def get_queryset(self):                          # ← indented inside class
         queryset = super().get_queryset()
-        
-        # Filter by status
+        user = self.request.user
+
+        if getattr(self, 'swagger_fake_view', False):
+            return queryset.none()
+
+        if not user.is_authenticated:
+            return queryset.none()
+
         status_param = self.request.query_params.get('status')
         if status_param:
             queryset = queryset.filter(status=status_param)
-        
-        # Filter by employee
+
         employee_id = self.request.query_params.get('employee')
         if employee_id:
             queryset = queryset.filter(employee_id=employee_id)
-        
-        # Filter by device
+
         device_id = self.request.query_params.get('device')
         if device_id:
             queryset = queryset.filter(device_id=device_id)
-        
-        # Show only user's assignments if not admin/manager
-        if self.request.user.role not in ['admin', 'manager']:
-            queryset = queryset.filter(employee=self.request.user)
-        
+
+        if getattr(user, 'role', None) not in ['admin', 'manager']:
+            queryset = queryset.filter(employee=user)
+
         return queryset
-    
-    def perform_create(self, serializer):
+
+    def perform_create(self, serializer):            # ← continues inside class
         serializer.save(assigned_by=self.request.user)
     
     @action(detail=True, methods=['post'])
@@ -283,7 +290,13 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def my_assignments(self, request):
         """Get current user's assignments"""
-        assignments = self.queryset.filter(employee=request.user, status='active')
+        assignments = Assignment.objects.filter(employee=request.user)
+        
+        # Optional status filter from query param
+        status_param = request.query_params.get('status')
+        if status_param:
+            assignments = assignments.filter(status=status_param)
+        
         serializer = AssignmentListSerializer(assignments, many=True)
         return Response(serializer.data)
     

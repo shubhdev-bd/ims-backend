@@ -4,7 +4,7 @@ Management command to load devices from inventory.json
 import json
 import os
 from django.core.management.base import BaseCommand, CommandError
-# from apps.inventory.models import Device
+from apps.inventory.models import Device
 
 
 class Command(BaseCommand):

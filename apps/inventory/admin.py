@@ -9,7 +9,7 @@ from .models import Device, Assignment, TicketRequest
 
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
-    list_display = ['device_id', 'device_type', 'brand', 'model', 'quantity']
+    list_display = ['device_id', 'device_type', 'brand', 'model', 'status']
     list_filter = ['device_type', 'brand']
     search_fields = ['device_id', 'brand', 'model']
     

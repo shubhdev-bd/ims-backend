@@ -105,7 +105,7 @@ class Assignment(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    device = models.ForeignKey('inventory.Device', on_delete=models.CASCADE, related_name='assignments')
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='assignments')
     employee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -354,28 +354,28 @@ class DashboardStats(models.Model):
 
 
 
-from django.db import models
+# from django.db import models
 
-class Device(models.Model):
-    DEVICE_TYPES = [
-        ('laptop', 'Laptop'),
-        ('mouse', 'Mouse'),
-        ('keyboard', 'Keyboard'),
-        ('sim', 'SIM Card'),
-        ('pc', 'PC Setup'),
-        ('headphone', 'Headphone'),
-    ]
+# class Device(models.Model):
+#     DEVICE_TYPES = [
+#         ('laptop', 'Laptop'),
+#         ('mouse', 'Mouse'),
+#         ('keyboard', 'Keyboard'),
+#         ('sim', 'SIM Card'),
+#         ('pc', 'PC Setup'),
+#         ('headphone', 'Headphone'),
+#     ]
 
-    device_id = models.CharField(max_length=20, unique=True)
-    device_type = models.CharField(max_length=20, choices=DEVICE_TYPES)
+#     device_id = models.CharField(max_length=20, unique=True)
+#     device_type = models.CharField(max_length=20, choices=DEVICE_TYPES)
 
-    brand = models.CharField(max_length=100, blank=True, null=True)
-    model = models.CharField(max_length=100, blank=True, null=True)
+#     brand = models.CharField(max_length=100, blank=True, null=True)
+#     model = models.CharField(max_length=100, blank=True, null=True)
 
-    specs = models.JSONField(blank=True, null=True)  # 🔥 stores flexible data
-    description = models.TextField(blank=True)
+#     specs = models.JSONField(blank=True, null=True)  # 🔥 stores flexible data
+#     description = models.TextField(blank=True)
 
-    quantity = models.IntegerField(default=1)
+#     quantity = models.IntegerField(default=1)
 
-    def __str__(self):
-        return f"{self.device_id} - {self.device_type}"
+#     def __str__(self):
+#         return f"{self.device_id} - {self.device_type}"
