@@ -800,8 +800,8 @@ class UploadInventoryView(APIView):
 
         inventory = data.get("inventory", {})
         created_devices = []
-
-        def create_device(item, device_type):
+        
+        def create_device(item, device_type, user):
             device_id = item.get("id")
 
             # Avoid duplicates
@@ -812,25 +812,56 @@ class UploadInventoryView(APIView):
             brand = item.get("brand", "")
             model = item.get("model", "")
 
-            quantity = item.get("quantity", 1)
+            # Remove known fields → rest goes to specifications
+            excluded_keys = ["id", "brand", "model"]
+            specifications = {k: v for k, v in item.items() if k not in excluded_keys}
 
-            # Remove known fields → rest goes to specs
-            excluded_keys = ["id", "brand", "model", "quantity"]
-            specs = {k: v for k, v in item.items() if k not in excluded_keys}
-
-            description = f"{brand} {model} {device_type}".strip()
+            name = f"{brand} {model}".strip() or device_type
 
             device = Device.objects.create(
                 device_id=device_id,
+                name=name,
                 device_type=device_type,
                 brand=brand,
                 model=model,
-                specs=specs,
-                description=description,
-                quantity=quantity
+                specifications=specifications,
+                status="available",
+                created_by=user
             )
 
             return device
+        
+
+        # def create_device(item, device_type):
+        #     device_id = item.get("id")
+
+        #     # Avoid duplicates
+        #     if Device.objects.filter(device_id=device_id).exists():
+        #         return None
+
+        #     # Extract common fields
+        #     brand = item.get("brand", "")
+        #     model = item.get("model", "")
+
+        #     quantity = item.get("quantity", 1)
+
+        #     # Remove known fields → rest goes to specs
+        #     excluded_keys = ["id", "brand", "model", "quantity"]
+        #     specs = {k: v for k, v in item.items() if k not in excluded_keys}
+
+        #     description = f"{brand} {model} {device_type}".strip()
+
+        #     device = Device.objects.create(
+        #         device_id=device_id,
+        #         device_type=device_type,
+        #         brand=brand,
+        #         model=model,
+        #         specs=specs,
+        #         description=description,
+        #         quantity=quantity
+        #     )
+
+        #     return device
 
         # 🔥 Mapping JSON keys → model types
         mapping = {
@@ -845,7 +876,7 @@ class UploadInventoryView(APIView):
         for key, device_type in mapping.items():
             items = inventory.get(key, [])
             for item in items:
-                device = create_device(item, device_type)
+                device = create_device(item, device_type, request.user)
                 if device:
                     created_devices.append(device.device_id)
 
