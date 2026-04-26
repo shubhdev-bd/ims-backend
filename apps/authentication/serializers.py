@@ -9,6 +9,19 @@ from .models import Employee
 
 class EmployeeSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
+    assigned_devices_count = serializers.SerializerMethodField()
+
+    ACTIVE_ASSIGNMENT_STATUSES = {'active', 'approved'}
+
+    def get_assigned_devices_count(self, obj):
+        prefetched_assignments = getattr(obj, '_prefetched_objects_cache', {}).get('assignments')
+        if prefetched_assignments is not None:
+            return sum(
+                1 for assignment in prefetched_assignments
+                if assignment.status in self.ACTIVE_ASSIGNMENT_STATUSES
+            )
+
+        return obj.assignments.filter(status__in=self.ACTIVE_ASSIGNMENT_STATUSES).count()
 
     class Meta:
         model = Employee
@@ -29,6 +42,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'email_verified_at',
             'date_joined',
             'profile_picture_url',
+            'assigned_devices_count',
         ]
         read_only_fields = [
             'id',

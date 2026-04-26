@@ -309,7 +309,7 @@ class EmployeeDetailView(generics.RetrieveUpdateDestroyAPIView):
         instance.save()
 
 class EmployeeListCreateView(generics.ListCreateAPIView):
-    queryset = Employee.objects.filter(is_active=True)
+    queryset = Employee.objects.filter(is_active=True).prefetch_related('assignments')
     permission_classes = [IsAdmin]
 
     def get_serializer_class(self):
@@ -318,7 +318,7 @@ class EmployeeListCreateView(generics.ListCreateAPIView):
         return EmployeeSerializer
 
 class EmployeeDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Employee.objects.all()
+    queryset = Employee.objects.all().prefetch_related('assignments')
     permission_classes = [IsAdmin]
 
     def get_serializer_class(self):

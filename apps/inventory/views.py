@@ -729,7 +729,7 @@ class DashboardViewSet(viewsets.ViewSet):
         total_employees = Employee.objects.filter(is_active=True).count()
         active_employees = Employee.objects.filter(
             is_active=True,
-            device_assignments__status='active'
+            assignments__status='active'
         ).distinct().count()
         
         # Assignment statistics

@@ -109,7 +109,7 @@ class Assignment(models.Model):
     employee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='device_assignments'
+        related_name='assignments'
     )
     
     # Assignment Details
