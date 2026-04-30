@@ -625,7 +625,8 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
                 html_body=admin_html,
             )
 
-    def _grant_device_request(self, request, device_request):
+    
+    def _approve_device_request(self, request, device_request):
         if device_request.status != 'pending':
             return Response({
                 'error': 'Request is not pending'
@@ -633,80 +634,62 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
 
         if request.user.role not in ['admin', 'manager']:
             return Response({
-                'error': 'Only admins and managers can grant devices'
+                'error': 'Only admins and managers can approve requests'
             }, status=status.HTTP_403_FORBIDDEN)
 
-        device = Device.objects.filter(
-            device_type=device_request.device_type,
-            status='available'
-        ).first()
-
-        if not device:
-            return Response({
-                'error': 'No available device matches the request'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        from datetime import timedelta
-        expected_return_date = timezone.now().date() + timedelta(days=30)
-
-        assignment = Assignment.objects.create(
-            device=device,
-            employee=device_request.requested_by,
-            assigned_by=request.user,
-            expected_return_date=expected_return_date,
-            status='approved'
-        )
-
-        device_request.status = 'approved'
+        device_request.status = 'consent_pending'
         device_request.approved_at = timezone.now()
         device_request.approved_by = request.user
-        device_request.assignment = assignment
+        device_request.assignment = None  # Ensure no assignment is created
         device_request.save(update_fields=['status', 'approved_at', 'approved_by', 'assignment', 'updated_at'])
 
-        email_service.send_device_grant_email(assignment, granted_by=request.user)
+        # Optionally, send notification email here if needed
 
         serializer = self.get_serializer(device_request)
         return Response({
-            'message': 'Device granted successfully',
-            'request': serializer.data,
-            'assignment_id': str(assignment.id)
+            'message': 'Device request approved, awaiting consent',
+            'request': serializer.data
         })
+
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """Backward-compatible alias for granting a device to a pending request."""
-        return self._grant_device_request(request, self.get_object())
+        """Approve a device request and set status to consent_pending."""
+        return self._approve_device_request(request, self.get_object())
 
+    # Grant endpoint is deprecated in new flow, but kept for backward compatibility
     @action(detail=True, methods=['post'])
     def grant(self, request, pk=None):
-        """Grant a device for a pending request and notify stakeholders."""
-        return self._grant_device_request(request, self.get_object())
+        return Response({
+            'error': 'Grant flow is deprecated. Use approve to move to consent_pending.'
+        }, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         """Reject device request"""
         device_request = self.get_object()
-        
-        if device_request.status != 'pending':
+
+        if device_request.status not in ['pending', 'consent_pending']:
             return Response({
-                'error': 'Request is not pending'
+                'error': 'Request is not pending or consent_pending'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # Check if admin/manager
         if request.user.role not in ['admin', 'manager']:
             return Response({
                 'error': 'Only admins and managers can reject requests'
             }, status=status.HTTP_403_FORBIDDEN)
-        
+
         reason = request.data.get('reason', '')
         device_request.status = 'rejected'
-        device_request.save()
-        
+        device_request.save(update_fields=['status', 'updated_at'])
+
         serializer = self.get_serializer(device_request)
         return Response({
             'message': 'Device request rejected',
             'request': serializer.data
         })
+
 
 
 class DashboardViewSet(viewsets.ViewSet):

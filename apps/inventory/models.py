@@ -287,9 +287,10 @@ class DeviceRequest(models.Model):
     
     STATUS_CHOICES = [
         ('pending', 'Pending'),
-        ('approved', 'Approved'),
+        ('consent_pending', 'Consent Pending'),
+        ('active', 'Active'),
         ('rejected', 'Rejected'),
-        ('assigned', 'Assigned'),
+        
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
