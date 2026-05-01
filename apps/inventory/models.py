@@ -3,6 +3,7 @@ Inventory Models
 """
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 import uuid
 
 
@@ -186,6 +187,12 @@ class Assignment(models.Model):
 
 class TicketRequest(models.Model):
     """Model for support/maintenance ticket requests"""
+
+    STATUS_PENDING = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_ON_REPAIR = 'on_repair'
+    STATUS_REPAIRED = 'repaired'
+    STATUS_REJECTED = 'rejected'
     
     TICKET_TYPE_CHOICES = [
         ('repair', 'Repair Request'),
@@ -204,11 +211,14 @@ class TicketRequest(models.Model):
     ]
     
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('in_progress', 'In Progress'),
-        ('resolved', 'Resolved'),
-        ('rejected', 'Rejected'),
-        ('closed', 'Closed'),
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_ON_REPAIR, 'Repairing Initiated'),
+        (STATUS_REPAIRED, 'Repaired'),
+        (STATUS_REJECTED, 'Rejected'),
+        ('in_progress', 'Legacy: In Progress'),
+        ('resolved', 'Legacy: Resolved'),
+        ('closed', 'Legacy: Closed'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -224,7 +234,7 @@ class TicketRequest(models.Model):
     # Ticket Details
     ticket_type = models.CharField(max_length=20, choices=TICKET_TYPE_CHOICES)
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='medium')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     
     # Related Device (optional)
     device = models.ForeignKey(
@@ -267,6 +277,28 @@ class TicketRequest(models.Model):
     
     def __str__(self):
         return f"{self.ticket_number} - {self.subject}"
+
+    @classmethod
+    def normalize_status(cls, value):
+        """Map legacy and UI status values to the canonical ticket workflow."""
+        if not value:
+            return cls.STATUS_PENDING
+
+        normalized = str(value).strip().lower()
+        status_map = {
+            cls.STATUS_PENDING: cls.STATUS_PENDING,
+            cls.STATUS_APPROVED: cls.STATUS_APPROVED,
+            'in_progress': cls.STATUS_APPROVED,
+            cls.STATUS_ON_REPAIR: cls.STATUS_ON_REPAIR,
+            'in_repair': cls.STATUS_ON_REPAIR,
+            'repairing': cls.STATUS_ON_REPAIR,
+            'repairing_initiated': cls.STATUS_ON_REPAIR,
+            cls.STATUS_REPAIRED: cls.STATUS_REPAIRED,
+            'resolved': cls.STATUS_REPAIRED,
+            'closed': cls.STATUS_REPAIRED,
+            cls.STATUS_REJECTED: cls.STATUS_REJECTED,
+        }
+        return status_map.get(normalized, cls.STATUS_PENDING)
     
     def save(self, *args, **kwargs):
         """Generate ticket number if not exists"""
@@ -278,6 +310,10 @@ class TicketRequest(models.Model):
                 self.ticket_number = f"TKT{str(last_num + 1).zfill(3)}"
             else:
                 self.ticket_number = "TKT001"
+
+        self.status = self.normalize_status(self.status)
+        if self.status == self.STATUS_REPAIRED and not self.resolved_at:
+            self.resolved_at = timezone.now()
         
         super().save(*args, **kwargs)
 

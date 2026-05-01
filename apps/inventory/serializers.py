@@ -121,7 +121,11 @@ class AssignmentListSerializer(serializers.ModelSerializer):
 
 class TicketRequestSerializer(serializers.ModelSerializer):
     """Serializer for TicketRequest model"""
-    
+
+    status = serializers.ChoiceField(
+        choices=TicketRequest.STATUS_CHOICES,
+        required=False,
+    )
     requested_by_details = EmployeeSerializer(source='requested_by', read_only=True)
     device_details = DeviceListSerializer(source='device', read_only=True)
     assigned_to_details = EmployeeSerializer(source='assigned_to', read_only=True)
@@ -137,20 +141,36 @@ class TicketRequestSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'ticket_number', 'requested_by', 'created_at', 'updated_at']
 
+    def validate_status(self, value):
+        return TicketRequest.normalize_status(value)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['status'] = TicketRequest.normalize_status(data.get('status'))
+        return data
+
 
 class TicketRequestListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for ticket list"""
-    
+
+    device_details = DeviceListSerializer(source='device', read_only=True)
     requested_by_name = serializers.CharField(source='requested_by.full_name', read_only=True)
+    requested_by_details = EmployeeSerializer(source='requested_by', read_only=True)
     device_name = serializers.CharField(source='device.name', read_only=True)
-    
+
     class Meta:
         model = TicketRequest
         fields = [
             'id', 'ticket_number', 'requested_by', 'requested_by_name',
-            'ticket_type', 'priority', 'status', 'device', 'device_name',
-            'subject', 'created_at'
+            'requested_by_details', 'ticket_type', 'priority', 'status',
+            'device', 'device_name', 'device_details', 'subject',
+            'description', 'created_at', 'resolution_notes', 'resolved_at'
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['status'] = TicketRequest.normalize_status(data.get('status'))
+        return data
 
 
 class DeviceRequestSerializer(serializers.ModelSerializer):

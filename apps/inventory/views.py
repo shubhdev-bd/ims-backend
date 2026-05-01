@@ -571,7 +571,7 @@ class TicketRequestViewSet(viewsets.ModelViewSet):
         try:
             employee = Employee.objects.get(id=employee_id)
             ticket.assigned_to = employee
-            ticket.status = 'in_progress'
+            ticket.status = TicketRequest.STATUS_ON_REPAIR
             ticket.save()
             
             email_service.send_ticket_assigned_email(ticket)
@@ -597,7 +597,7 @@ class TicketRequestViewSet(viewsets.ModelViewSet):
                 'error': 'Resolution notes are required'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        ticket.status = 'resolved'
+        ticket.status = TicketRequest.STATUS_REPAIRED
         ticket.resolution_notes = resolution_notes
         ticket.resolved_at = timezone.now()
         ticket.save()
@@ -613,8 +613,10 @@ class TicketRequestViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def my_tickets(self, request):
         """Get current user's tickets"""
-        tickets = self.queryset.filter(requested_by=request.user)
-        serializer = TicketRequestListSerializer(tickets, many=True)
+        tickets = self.filter_queryset(
+            self.queryset.filter(requested_by=request.user)
+        )
+        serializer = TicketRequestSerializer(tickets, many=True)
         return Response(serializer.data)
 
 
