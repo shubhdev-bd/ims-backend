@@ -315,6 +315,8 @@ class InventoryEmailService:
         if not assignment or not assignment.employee or not assignment.device:
             return {'success': False, 'error': 'Assignment with employee and device is required'}
 
+        consent_link = f"{settings.FRONTEND_URL}/requesthistory"
+
         subject = f"Device Granted - {assignment.device.device_id}"
         html_body = f"""
         <p>Dear {assignment.employee.full_name},</p>
@@ -324,13 +326,18 @@ class InventoryEmailService:
         <p><strong>Type:</strong> {assignment.device.device_type}</p>
         <p><strong>Granted By:</strong> {granted_by.full_name if granted_by else assignment.assigned_by.full_name if assignment.assigned_by else 'Admin'}</p>
         <p><strong>Expected Return Date:</strong> {assignment.expected_return_date or 'Not specified'}</p>
-        <p>Please complete the undertaking and consent steps in the IMS portal.</p>
+        <p>Please complete the undertaking and consent steps in the IMS portal:</p>
+        <p>
+          <a href="{consent_link}" style="display:inline-block;padding:10px 16px;background:#3b82f6;color:#fff;text-decoration:none;border-radius:6px;">
+            Open IMS and Fill Consent
+          </a>
+        </p>
         <p>Best regards,<br/>Inventory Management System</p>
         """
         text_body = (
             f"Device granted: {assignment.device.device_id}\n"
             f"Device: {assignment.device.brand} {assignment.device.model}\n"
-            f"Please complete the undertaking and consent steps in the IMS portal."
+            f"Fill consent here: {consent_link}"
         )
 
         employee_result = self.send_generic_email(

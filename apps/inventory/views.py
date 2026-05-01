@@ -121,6 +121,15 @@ class AssignmentViewSet(viewsets.ModelViewSet):
             return AssignmentListSerializer
         return AssignmentSerializer
 
+    def get_permissions(self):
+        """
+        Allow employees to execute their own self-service actions.
+        Keep admin/manager restriction for management actions.
+        """
+        if self.action in ['submit_consent', 'submit_return_form', 'my_assignments']:
+            return [IsAuthenticated()]
+        return [permission() for permission in self.permission_classes]
+
     def get_queryset(self):                          # ← indented inside class
         queryset = super().get_queryset()
         user = self.request.user
@@ -176,15 +185,24 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     def submit_consent(self, request, pk=None):
         """Submit consent form by user"""
         assignment = self.get_object()
-        
-        if assignment.employee != request.user:
+
+        # Primary ownership check via assignment owner.
+        # Fallback: allow if the linked device request belongs to this user
+        # (handles legacy/misaligned assignment owner data safely).
+        owns_assignment = assignment.employee_id == request.user.id
+        owns_linked_request = DeviceRequest.objects.filter(
+            assignment=assignment,
+            requested_by=request.user,
+        ).exists()
+
+        if not owns_assignment and not owns_linked_request:
             return Response({
                 'error': 'You can only submit consent for your own assignments'
             }, status=status.HTTP_403_FORBIDDEN)
         
-        if assignment.status != 'approved':
+        if assignment.status not in ['approved', 'consent_pending']:
             return Response({
-                'error': 'Assignment must be approved before submitting consent'
+                'error': 'Assignment must be approved or consent pending before submitting consent'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         consent_data = request.data.get('consent_form_data', {})
@@ -194,10 +212,52 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         assignment.consent_images = consent_images
         assignment.status = 'consent_pending'
         assignment.save()
+
+        # Notify user + admins that consent was submitted and pending review
+        try:
+            user_subject = "Consent Form Submitted - Awaiting Approval"
+            user_html = f"""
+            <p>Dear {assignment.employee.full_name},</p>
+            <p>Your device consent form has been submitted successfully.</p>
+            <p>Please wait for admin approval.</p>
+            <p>Best regards,<br/>Inventory Management System</p>
+            """
+            user_text = "Your consent form is submitted successfully. Please wait for admin approval."
+            email_service.send_generic_email(
+                assignment.employee.email,
+                user_subject,
+                user_text,
+                html_body=user_html,
+            )
+
+            admin_subject = f"Consent Form Submitted - {assignment.employee.full_name}"
+            admin_html = f"""
+            <p>A user has submitted a consent form for review.</p>
+            <p><strong>Employee:</strong> {assignment.employee.full_name} ({assignment.employee.email})</p>
+            <p><strong>Device:</strong> {assignment.device.device_id} - {assignment.device.brand} {assignment.device.model}</p>
+            <p>Please check the consent form in Device Requests &amp; Undertakings.</p>
+            """
+            admin_text = (
+                f"Consent submitted by {assignment.employee.full_name} "
+                f"for device {assignment.device.device_id}. Please check the consent form."
+            )
+            admin_emails = list(
+                Employee.objects.filter(role='admin', is_active=True).values_list('email', flat=True)
+            )
+            if admin_emails:
+                email_service.send_generic_email(
+                    admin_emails,
+                    admin_subject,
+                    admin_text,
+                    html_body=admin_html,
+                )
+        except Exception:
+            # Keep API response successful even if email channel fails
+            pass
         
         serializer = self.get_serializer(assignment)
         return Response({
-            'message': 'Consent form submitted successfully',
+            'message': 'Consent form submitted successfully. Awaiting admin approval.',
             'assignment': serializer.data
         })
     
@@ -221,6 +281,12 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         assignment.consent_approved_by = request.user
         assignment.status = 'active'
         assignment.save()
+
+        # Keep device request status in sync with approved assignment
+        DeviceRequest.objects.filter(assignment=assignment).update(
+            status='active',
+            updated_at=timezone.now(),
+        )
         
         # Send email notification through Apps Script
         email_service.send_assignment_approved_email(assignment)
@@ -637,17 +703,49 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
                 'error': 'Only admins and managers can approve requests'
             }, status=status.HTTP_403_FORBIDDEN)
 
+        # Allocate an available device that matches the request.
+        # This keeps the flow consistent: once approved, the employee must fill consent
+        # for a concrete device assignment.
+        device_qs = Device.objects.filter(
+            status='available',
+            device_type=device_request.device_type,
+        )
+        if device_request.brand:
+            device_qs = device_qs.filter(brand__iexact=device_request.brand)
+        if device_request.model:
+            device_qs = device_qs.filter(model__iexact=device_request.model)
+
+        selected_device = device_qs.order_by('created_at').first()
+        if not selected_device:
+            return Response({
+                'error': 'No available device found to fulfill this request.'
+            }, status=status.HTTP_409_CONFLICT)
+
+        assignment = Assignment.objects.create(
+            device=selected_device,
+            employee=device_request.requested_by,
+            status='consent_pending',
+            assigned_by=request.user,
+            assignment_notes=f"Auto-granted from device request {device_request.id}",
+        )
+
         device_request.status = 'consent_pending'
         device_request.approved_at = timezone.now()
         device_request.approved_by = request.user
-        device_request.assignment = None  # Ensure no assignment is created
+        device_request.assignment = assignment
         device_request.save(update_fields=['status', 'approved_at', 'approved_by', 'assignment', 'updated_at'])
 
-        # Optionally, send notification email here if needed
+        # Notify employee to fill consent in the portal
+        try:
+            email_service.send_device_grant_email(assignment, granted_by=request.user)
+            email_service.send_consent_request_email(assignment)
+        except Exception:
+            # Don't fail the approve flow if email sending is misconfigured
+            pass
 
         serializer = self.get_serializer(device_request)
         return Response({
-            'message': 'Device request approved, awaiting consent',
+            'message': 'Device granted. Awaiting employee consent.',
             'request': serializer.data
         })
 
