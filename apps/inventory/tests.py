@@ -1,9 +1,11 @@
+from datetime import date
+
 from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.authentication.models import Employee
-from .models import Device, DeviceRequest, TicketRequest
+from .models import Assignment, Device, DeviceRequest, TicketRequest
 
 
 @override_settings(APPS_SCRIPT_URL="")
@@ -175,3 +177,73 @@ class TicketWorkflowTests(TestCase):
         ticket.refresh_from_db()
         self.assertEqual(ticket.status, "repaired")
         self.assertIsNotNone(ticket.resolved_at)
+
+
+@override_settings(APPS_SCRIPT_URL="")
+class MyAssignmentsPayloadTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = Employee.objects.create_user(
+            email="admin-assignment@example.com",
+            password="StrongPass123!",
+            first_name="Admin",
+            last_name="Assignment",
+            role="admin",
+            is_staff=True,
+            email_verified=True,
+        )
+        self.employee = Employee.objects.create_user(
+            email="employee-assignment@example.com",
+            password="StrongPass123!",
+            first_name="Assigned",
+            last_name="User",
+            role="employee",
+            email_verified=True,
+        )
+        self.device = Device.objects.create(
+            device_id="DEV003",
+            name="MacBook Pro",
+            device_type="laptop",
+            brand="Apple",
+            model='M3 Pro 14"',
+            serial_number="SN-24680",
+            status="assigned",
+            condition="excellent",
+            specifications={"ram": "18 GB", "storage": "512 GB"},
+            location="HQ",
+            notes="Issued with charger and sleeve",
+            image_url="https://example.com/device.png",
+            created_by=self.admin,
+        )
+        self.assignment = Assignment.objects.create(
+            device=self.device,
+            employee=self.employee,
+            assigned_by=self.admin,
+            status="active",
+            expected_return_date=date(2026, 5, 10),
+            consent_form_data={
+                "employee_name": "Assigned User",
+                "employee_id": self.employee.employee_id,
+                "device_name": "MacBook Pro",
+                "device_id": "DEV003",
+                "received_date": "2026-05-01",
+                "condition": "excellent",
+                "accessories": "Charger, sleeve",
+            },
+            consent_images=["https://example.com/consent-1.png"],
+        )
+
+    def test_my_assignments_returns_full_assignment_device_and_consent_data(self):
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.get("/api/inventory/assignments/my_assignments/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data[0]
+        self.assertEqual(data["id"], str(self.assignment.id))
+        self.assertEqual(data["device_details"]["device_id"], "DEV003")
+        self.assertEqual(data["device_details"]["serial_number"], "SN-24680")
+        self.assertEqual(data["device_details"]["image_url"], "https://example.com/device.png")
+        self.assertEqual(data["expected_return_date"], "2026-05-10")
+        self.assertEqual(data["consent_form_data"]["employee_name"], "Assigned User")
+        self.assertEqual(data["consent_images"], ["https://example.com/consent-1.png"])

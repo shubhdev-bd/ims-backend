@@ -363,7 +363,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         if status_param:
             assignments = assignments.filter(status=status_param)
         
-        serializer = AssignmentListSerializer(assignments, many=True)
+        serializer = AssignmentSerializer(assignments, many=True)
         return Response(serializer.data)
     
     @action(detail=True, methods=['post'])

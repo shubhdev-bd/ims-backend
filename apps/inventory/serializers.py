@@ -51,10 +51,23 @@ class DeviceListSerializer(serializers.ModelSerializer):
         ]
 
 
+class AssignmentDeviceSerializer(serializers.ModelSerializer):
+    """Detailed device data for assignment views"""
+
+    class Meta:
+        model = Device
+        fields = [
+            'id', 'device_id', 'name', 'device_type', 'brand', 'model',
+            'serial_number', 'status', 'condition', 'specifications',
+            'purchase_date', 'purchase_price', 'warranty_expiry',
+            'location', 'notes', 'image', 'image_url', 'created_at', 'updated_at',
+        ]
+
+
 class AssignmentSerializer(serializers.ModelSerializer):
     """Serializer for Assignment model"""
     
-    device_details = DeviceListSerializer(source='device', read_only=True)
+    device_details = AssignmentDeviceSerializer(source='device', read_only=True)
     employee_details = EmployeeSerializer(source='employee', read_only=True)
     assigned_by_name = serializers.SerializerMethodField()
     return_form_pending = serializers.SerializerMethodField()
