@@ -325,6 +325,7 @@ class DeviceRequest(models.Model):
         ('pending', 'Pending'),
         ('consent_pending', 'Consent Pending'),
         ('active', 'Active'),
+        ('returned', 'Returned'),
         ('rejected', 'Rejected'),
         
     ]
@@ -388,31 +389,3 @@ class DashboardStats(models.Model):
         db_table = 'dashboard_stats'
         verbose_name = 'Dashboard Statistics'
         verbose_name_plural = 'Dashboard Statistics'
-
-
-
-# from django.db import models
-
-# class Device(models.Model):
-#     DEVICE_TYPES = [
-#         ('laptop', 'Laptop'),
-#         ('mouse', 'Mouse'),
-#         ('keyboard', 'Keyboard'),
-#         ('sim', 'SIM Card'),
-#         ('pc', 'PC Setup'),
-#         ('headphone', 'Headphone'),
-#     ]
-
-#     device_id = models.CharField(max_length=20, unique=True)
-#     device_type = models.CharField(max_length=20, choices=DEVICE_TYPES)
-
-#     brand = models.CharField(max_length=100, blank=True, null=True)
-#     model = models.CharField(max_length=100, blank=True, null=True)
-
-#     specs = models.JSONField(blank=True, null=True)  # 🔥 stores flexible data
-#     description = models.TextField(blank=True)
-
-#     quantity = models.IntegerField(default=1)
-
-#     def __str__(self):
-#         return f"{self.device_id} - {self.device_type}"

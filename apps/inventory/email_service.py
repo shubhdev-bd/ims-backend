@@ -177,6 +177,7 @@ class InventoryEmailService:
 
     def send_ticket_created_email(self, ticket):
         subject = f"New Ticket Submitted: {ticket.subject or ticket.ticket_number}"
+        ticket_link = f"{settings.FRONTEND_URL}/tickets"
         html_body = f"""
         <p>Dear {ticket.requested_by.full_name},</p>
         <p>Your ticket has been submitted successfully.</p>
@@ -184,10 +185,14 @@ class InventoryEmailService:
         <p><strong>Subject:</strong> {ticket.subject}</p>
         <p><strong>Description:</strong> {ticket.description}</p>
         <p><strong>Priority:</strong> {ticket.priority}</p>
-        <p>You can view your ticket in the IMS portal.</p>
+        <p>You can view your ticket in the IMS portal here: <a href="{ticket_link}">{ticket_link}</a></p>
         <p>Best regards,<br/>Inventory Management System</p>
         """
-        text_body = f"New ticket submitted: {ticket.subject or ticket.ticket_number}\n\n{ticket.description}"
+        text_body = (
+            f"New ticket submitted: {ticket.subject or ticket.ticket_number}\n\n"
+            f"{ticket.description}\n\n"
+            f"Portal: {ticket_link}"
+        )
 
         recipients = [ticket.requested_by.email]
         payload, error = self._build_email_payload(
@@ -208,16 +213,21 @@ class InventoryEmailService:
             return {'success': False, 'error': 'Ticket assignment requires both assigned_to and requested_by'}
 
         subject = f"Ticket Assigned: {ticket.subject or ticket.ticket_number}"
+        portal_link = f"{settings.FRONTEND_URL}/admin/ticketrequests"
         html_body = f"""
         <p>Dear {assigned_to.full_name},</p>
         <p>A ticket has been assigned to you.</p>
         <p><strong>Ticket Number:</strong> {ticket.ticket_number or ticket.id}</p>
         <p><strong>Subject:</strong> {ticket.subject}</p>
         <p><strong>Description:</strong> {ticket.description}</p>
-        <p>Please review and update the ticket in the IMS portal.</p>
+        <p>Please review and update the ticket in the IMS portal here: <a href="{portal_link}">{portal_link}</a></p>
         <p>Best regards,<br/>Inventory Management System</p>
         """
-        text_body = f"Ticket assigned: {ticket.subject or ticket.ticket_number}\n\n{ticket.description}"
+        text_body = (
+            f"Ticket assigned: {ticket.subject or ticket.ticket_number}\n\n"
+            f"{ticket.description}\n\n"
+            f"Portal: {portal_link}"
+        )
 
         recipients = [assigned_to.email, ticket.requested_by.email]
         payload, error = self._build_email_payload(
@@ -237,15 +247,21 @@ class InventoryEmailService:
             return {'success': False, 'error': 'Ticket must have a requester to send resolution email'}
 
         subject = f"Ticket Resolved: {ticket.subject or ticket.ticket_number}"
+        ticket_link = f"{settings.FRONTEND_URL}/tickets"
         html_body = f"""
         <p>Dear {ticket.requested_by.full_name},</p>
         <p>Your ticket has been marked as resolved.</p>
         <p><strong>Ticket Number:</strong> {ticket.ticket_number or ticket.id}</p>
         <p><strong>Subject:</strong> {ticket.subject}</p>
         <p><strong>Description:</strong> {ticket.description}</p>
+        <p>You can review it in the IMS portal here: <a href="{ticket_link}">{ticket_link}</a></p>
         <p>Best regards,<br/>Inventory Management System</p>
         """
-        text_body = f"Your ticket has been resolved: {ticket.subject or ticket.ticket_number}\n\n{ticket.description}"
+        text_body = (
+            f"Your ticket has been resolved: {ticket.subject or ticket.ticket_number}\n\n"
+            f"{ticket.description}\n\n"
+            f"Portal: {ticket_link}"
+        )
 
         payload, error = self._build_email_payload(
             subject,

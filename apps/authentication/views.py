@@ -42,9 +42,18 @@ class SignupView(generics.CreateAPIView):
         
         # Create employee
         employee = serializer.save()
+
+        # Treat signup as the employee's first successful login because
+        # the account is authenticated immediately after creation.
+        if employee.last_login is None:
+            employee.last_login = timezone.now()
+            employee.save(update_fields=['last_login'])
         
         # Send welcome email
-        send_welcome_email(employee)
+        try:
+            send_welcome_email(employee)
+        except Exception:
+            pass
         
         # Generate JWT tokens
         refresh = RefreshToken.for_user(employee)
@@ -76,6 +85,7 @@ class LoginView(APIView):
         serializer.is_valid(raise_exception=True)
         
         employee = serializer.validated_data['user']
+        is_first_login = employee.last_login is None
         
         # Generate JWT tokens
         refresh = RefreshToken.for_user(employee)
@@ -83,6 +93,12 @@ class LoginView(APIView):
         # Update last login
         employee.last_login = timezone.now()
         employee.save(update_fields=['last_login'])
+
+        if is_first_login:
+            try:
+                send_welcome_email(employee)
+            except Exception:
+                pass
         
         # Return employee data with tokens
         employee_serializer = EmployeeSerializer(employee)

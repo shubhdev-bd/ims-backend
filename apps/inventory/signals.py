@@ -42,7 +42,7 @@ def assignment_post_save(sender, instance, created, **kwargs):
                 email_service.send_assignment_processed_email(
                     instance,
                     status='Returned',
-                    message='Your device has been returned and is pending review.',
+                    message='Your device return has been recorded successfully. Thank you.',
                 )
 
         if previous_consent_approved is False and instance.consent_approved:

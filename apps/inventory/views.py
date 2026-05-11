@@ -34,7 +34,7 @@ def home(request):
 class DeviceViewSet(viewsets.ModelViewSet):
     """ViewSet for Device model"""
     
-    queryset = Device.objects.all()
+    queryset = Device.objects.select_related('created_by').all()
     permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['device_id', 'name', 'brand', 'model', 'serial_number']
@@ -109,7 +109,13 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
 
 class AssignmentViewSet(viewsets.ModelViewSet):
-    queryset = Assignment.objects.all()
+    queryset = Assignment.objects.select_related(
+        'device',
+        'employee',
+        'assigned_by',
+        'consent_approved_by',
+        'return_approved_by',
+    ).all()
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['device__device_id', 'device__name', 'employee__first_name', 'employee__last_name']
@@ -174,10 +180,52 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         assignment.return_date = timezone.now()
         assignment.return_notes = request.data.get('return_notes', '')
         assignment.save()
+
+        DeviceRequest.objects.filter(assignment=assignment).update(
+            status='returned',
+            updated_at=timezone.now(),
+        )
         
         serializer = self.get_serializer(assignment)
         return Response({
             'message': 'Device returned successfully',
+            'assignment': serializer.data
+        })
+
+    @action(detail=True, methods=['post'])
+    def revoke(self, request, pk=None):
+        """Admin revoke an assignment and return the device to inventory."""
+        assignment = self.get_object()
+
+        if request.user.role not in ['admin', 'manager']:
+            return Response({
+                'error': 'Only admins and managers can revoke assignments'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        if assignment.status == 'returned':
+            return Response({
+                'error': 'Assignment is already returned'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        assignment.status = 'returned'
+        assignment.return_date = timezone.now()
+        assignment.return_notes = request.data.get(
+            'return_notes',
+            'Assignment revoked by admin.',
+        )
+        assignment.return_approved = True
+        assignment.return_approved_at = timezone.now()
+        assignment.return_approved_by = request.user
+        assignment.save()
+
+        DeviceRequest.objects.filter(assignment=assignment).update(
+            status='returned',
+            updated_at=timezone.now(),
+        )
+
+        serializer = self.get_serializer(assignment)
+        return Response({
+            'message': 'Assignment revoked successfully',
             'assignment': serializer.data
         })
     
@@ -215,14 +263,19 @@ class AssignmentViewSet(viewsets.ModelViewSet):
 
         # Notify user + admins that consent was submitted and pending review
         try:
+            request_history_link = f"{settings.FRONTEND_URL}/requesthistory"
             user_subject = "Consent Form Submitted - Awaiting Approval"
             user_html = f"""
             <p>Dear {assignment.employee.full_name},</p>
             <p>Your device consent form has been submitted successfully.</p>
+            <p>You can track the next step here: <a href="{request_history_link}">{request_history_link}</a></p>
             <p>Please wait for admin approval.</p>
             <p>Best regards,<br/>Inventory Management System</p>
             """
-            user_text = "Your consent form is submitted successfully. Please wait for admin approval."
+            user_text = (
+                "Your consent form is submitted successfully. "
+                f"Please wait for admin approval.\nPortal: {request_history_link}"
+            )
             email_service.send_generic_email(
                 assignment.employee.email,
                 user_subject,
@@ -320,6 +373,11 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         assignment.status = 'returned'
         assignment.return_date = timezone.now()
         assignment.save()
+
+        DeviceRequest.objects.filter(assignment=assignment).update(
+            status='returned',
+            updated_at=timezone.now(),
+        )
         
         serializer = self.get_serializer(assignment)
         return Response({
@@ -346,6 +404,11 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         assignment.return_approved_at = timezone.now()
         assignment.return_approved_by = request.user
         assignment.save()
+
+        DeviceRequest.objects.filter(assignment=assignment).update(
+            status='returned',
+            updated_at=timezone.now(),
+        )
         
         serializer = self.get_serializer(assignment)
         return Response({
@@ -356,7 +419,9 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def my_assignments(self, request):
         """Get current user's assignments"""
-        assignments = Assignment.objects.filter(employee=request.user)
+        assignments = self.filter_queryset(
+            self.get_queryset().filter(employee=request.user)
+        )
         
         # Optional status filter from query param
         status_param = request.query_params.get('status')
@@ -394,6 +459,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         
         # Build email content
         subject = f"Device Assignment Notification - {assignment.device.device_id}"
+        my_devices_link = f"{settings.FRONTEND_URL}/mydevices"
         
         html_body = f"""
         <!DOCTYPE html>
@@ -437,6 +503,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
                         <li>Device must not be shared with third parties</li>
                     </ul>
                     
+                    <p>Open your assigned devices here: <a href="{my_devices_link}">{my_devices_link}</a></p>
                     <p>Please confirm receipt and device condition. Contact your admin if you have any questions.</p>
                     
                     <p>Best regards,<br/>
@@ -468,6 +535,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         - Device remains the property of the organization
         - Device must be returned in good condition
         - Report any issues immediately
+        - Portal: {my_devices_link}
         
         Best regards,
         Inventory Management System
@@ -515,7 +583,11 @@ class AssignmentViewSet(viewsets.ModelViewSet):
 class TicketRequestViewSet(viewsets.ModelViewSet):
     """ViewSet for TicketRequest model"""
     
-    queryset = TicketRequest.objects.all()
+    queryset = TicketRequest.objects.select_related(
+        'requested_by',
+        'device',
+        'assigned_to',
+    ).all()
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['ticket_number', 'subject', 'description']
@@ -609,6 +681,34 @@ class TicketRequestViewSet(viewsets.ModelViewSet):
             'message': 'Ticket resolved successfully',
             'ticket': serializer.data
         })
+
+    @action(detail=True, methods=['post'])
+    def revoke(self, request, pk=None):
+        """Admin revoke or close a ticket request."""
+        ticket = self.get_object()
+
+        if request.user.role not in ['admin', 'manager']:
+            return Response({
+                'error': 'Only admins and managers can revoke tickets'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        if ticket.status == TicketRequest.STATUS_REJECTED:
+            return Response({
+                'error': 'Ticket is already revoked'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        ticket.status = TicketRequest.STATUS_REJECTED
+        ticket.resolution_notes = request.data.get(
+            'resolution_notes',
+            ticket.resolution_notes or 'Ticket revoked by admin.',
+        )
+        ticket.save()
+
+        serializer = self.get_serializer(ticket)
+        return Response({
+            'message': 'Ticket revoked successfully',
+            'ticket': serializer.data
+        })
     
     @action(detail=False, methods=['get'])
     def my_tickets(self, request):
@@ -623,7 +723,16 @@ class TicketRequestViewSet(viewsets.ModelViewSet):
 class DeviceRequestViewSet(viewsets.ModelViewSet):
     """ViewSet for DeviceRequest model"""
     
-    queryset = DeviceRequest.objects.all()
+    queryset = DeviceRequest.objects.select_related(
+        'requested_by',
+        'approved_by',
+        'assignment',
+        'assignment__device',
+        'assignment__employee',
+        'assignment__assigned_by',
+        'assignment__consent_approved_by',
+        'assignment__return_approved_by',
+    ).all()
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['device_type', 'brand', 'model', 'reason']
@@ -649,6 +758,7 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         device_request = serializer.save(requested_by=self.request.user)
+        request_history_link = f"{settings.FRONTEND_URL}/requesthistory"
 
         subject = "Device Request Submitted"
         html_body = f"""
@@ -658,10 +768,15 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
         <p><strong>Brand:</strong> {device_request.brand or 'N/A'}</p>
         <p><strong>Model:</strong> {device_request.model or 'N/A'}</p>
         <p><strong>Reason:</strong> {device_request.reason}</p>
+        <p>Track your request here: <a href="{request_history_link}">{request_history_link}</a></p>
         <p>You will be notified once your request is reviewed.</p>
         <p>Best regards,<br/>Inventory Management System</p>
         """
-        text_body = f"Device request submitted for {device_request.device_type}.\nReason: {device_request.reason}"
+        text_body = (
+            f"Device request submitted for {device_request.device_type}.\n"
+            f"Reason: {device_request.reason}\n"
+            f"Portal: {request_history_link}"
+        )
 
         email_service.send_generic_email(
             [self.request.user.email],
@@ -784,11 +899,26 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
         device_request.status = 'rejected'
         device_request.save(update_fields=['status', 'updated_at'])
 
+        assignment = device_request.assignment
+        if assignment and assignment.status != 'returned':
+            assignment.status = 'returned'
+            assignment.return_date = timezone.now()
+            assignment.return_notes = reason or 'Device request revoked by admin.'
+            assignment.return_approved = True
+            assignment.return_approved_at = timezone.now()
+            assignment.return_approved_by = request.user
+            assignment.save()
+
         serializer = self.get_serializer(device_request)
         return Response({
             'message': 'Device request rejected',
             'request': serializer.data
         })
+
+    @action(detail=True, methods=['post'])
+    def revoke(self, request, pk=None):
+        """Alias for reject to support revoke semantics in admin UI."""
+        return self.reject(request, pk=pk)
 
 
 
@@ -833,8 +963,16 @@ class DashboardViewSet(viewsets.ViewSet):
         )
         
         # Recent data
-        recent_assignments = Assignment.objects.all()[:5]
-        recent_tickets = TicketRequest.objects.all()[:5]
+        recent_assignments = Assignment.objects.select_related(
+            'device',
+            'employee',
+            'assigned_by',
+        ).all()[:5]
+        recent_tickets = TicketRequest.objects.select_related(
+            'requested_by',
+            'device',
+            'assigned_to',
+        ).all()[:5]
         
         stats_data = {
             'total_devices': total_devices,

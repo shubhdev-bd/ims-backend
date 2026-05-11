@@ -47,7 +47,9 @@ class DeviceListSerializer(serializers.ModelSerializer):
         model = Device
         fields = [
             'id', 'device_id', 'name', 'device_type', 'brand',
-            'model', 'status', 'condition', 'location'
+            'model', 'serial_number', 'status', 'condition', 'specifications',
+            'purchase_date', 'purchase_price', 'warranty_expiry',
+            'location', 'notes', 'image', 'image_url', 'created_at', 'updated_at'
         ]
 
 
@@ -241,5 +243,4 @@ class DashboardStatsSerializer(serializers.Serializer):
     device_by_type = serializers.DictField()
     recent_assignments = AssignmentListSerializer(many=True)
     recent_tickets = TicketRequestListSerializer(many=True)
-
 

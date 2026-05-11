@@ -215,8 +215,11 @@ SIMPLE_JWT = {
 APPS_SCRIPT_URL = config('APPS_SCRIPT_URL', default='')
 APPS_SCRIPT_API_KEY = config('APPS_SCRIPT_API_KEY', default='')
 
-# Frontend URL for password reset links
-FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+# Frontend URL for portal and email links
+FRONTEND_URL = config(
+    'FRONTEND_URL',
+    default='https://ims-frontend-lilac-alpha.vercel.app'
+)
 
 # Email Configuration (fallback if not using Apps Script)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # For development

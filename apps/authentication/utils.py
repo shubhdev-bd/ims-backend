@@ -9,6 +9,13 @@ from django.conf import settings
 from .models import PasswordResetToken
 
 
+def _portal_url(path=""):
+    base_url = settings.FRONTEND_URL.rstrip("/")
+    if not path:
+        return base_url
+    return f"{base_url}/{path.lstrip('/')}"
+
+
 def generate_reset_token():
     """Generate a secure random token"""
     return secrets.token_urlsafe(32)
@@ -90,7 +97,12 @@ def send_email_via_apps_script(to_email, subject, html_content, text_content=Non
 
 def send_welcome_email(employee):
     """Send welcome email to new employee"""
-    subject = "Welcome to Inventory Management System"
+    subject = "Welcome to Believers Destination IMS"
+    login_url = _portal_url("/login")
+    devices_url = _portal_url("/devices")
+    company_name = getattr(settings, "COMPANY_NAME", "Believers Destination")
+    hrms_id = employee.hrms_id or "Not assigned yet"
+    role_name = employee.get_role_display() if hasattr(employee, "get_role_display") else (employee.role or "Employee")
     
     html_content = f"""
     <!DOCTYPE html>
@@ -108,28 +120,32 @@ def send_welcome_email(employee):
     <body>
         <div class="container">
             <div class="header">
-                <h1>Welcome to IMS!</h1>
+                <h1>Welcome to {company_name}</h1>
             </div>
             <div class="content">
                 <p>Hi {employee.first_name},</p>
-                <p>Welcome to the Inventory Management System! Your account has been successfully created.</p>
+                <p>Welcome to be a part of {company_name}.</p>
+                <p>Here you can check and get any devices which are required as per your role.</p>
                 
                 <p><strong>Your Details:</strong></p>
                 <ul>
                     <li>Email: {employee.email}</li>
-                    <li>Employee ID: {employee.employee_id}</li>
-                    <li>Department: {employee.get_department_display()}</li>
+                    <li>Employee ID: {employee.employee_id or 'Not assigned yet'}</li>
+                    <li>HRMS ID: {hrms_id}</li>
+                    <li>Role: {role_name}</li>
+                    <li>Department: {employee.get_department_display() or 'Not assigned yet'}</li>
                 </ul>
                 
-                <p>You can now log in to access the system:</p>
-                <a href="{settings.FRONTEND_URL}/login" class="button">Login to IMS</a>
+                <p>You can now log in to access the portal:</p>
+                <a href="{login_url}" class="button">Login to IMS</a>
+                <p>Portal: <a href="{devices_url}">{devices_url}</a></p>
                 
                 <p>If you have any questions, please contact your administrator.</p>
                 
-                <p>Best regards,<br>IMS Team</p>
+                <p>Best regards,<br>{company_name} IMS Team</p>
             </div>
             <div class="footer">
-                <p>© 2024 Inventory Management System. All rights reserved.</p>
+                <p>{_portal_url()}</p>
             </div>
         </div>
     </body>
@@ -137,21 +153,25 @@ def send_welcome_email(employee):
     """
     
     text_content = f"""
-    Welcome to Inventory Management System!
+    Welcome to {company_name} IMS!
     
     Hi {employee.first_name},
     
-    Your account has been successfully created.
+    Welcome to be a part of {company_name}.
+    Here you can check and get any devices which are required as per your role.
     
     Your Details:
     - Email: {employee.email}
-    - Employee ID: {employee.employee_id}
-    - Department: {employee.get_department_display()}
+    - Employee ID: {employee.employee_id or 'Not assigned yet'}
+    - HRMS ID: {hrms_id}
+    - Role: {role_name}
+    - Department: {employee.get_department_display() or 'Not assigned yet'}
     
-    You can now log in at: {settings.FRONTEND_URL}/login
+    You can now log in at: {login_url}
+    Device portal: {devices_url}
     
     Best regards,
-    IMS Team
+    {company_name} IMS Team
     """
     
     return send_email_via_apps_script(
@@ -164,7 +184,7 @@ def send_welcome_email(employee):
 
 def send_password_reset_email(employee, reset_token):
     """Send password reset email"""
-    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token.token}"
+    reset_url = f"{_portal_url('/reset-password')}?token={reset_token.token}"
     
     subject = "Reset Your Password - Inventory Management System"
     
@@ -202,10 +222,11 @@ def send_password_reset_email(employee, reset_token):
                 <p>Or copy and paste this URL into your browser:</p>
                 <p style="word-break: break-all; color: #667eea;">{reset_url}</p>
                 
+                <p>Portal: <a href="{_portal_url()}">{_portal_url()}</a></p>
                 <p>Best regards,<br>IMS Team</p>
             </div>
             <div class="footer">
-                <p>© 2024 Inventory Management System. All rights reserved.</p>
+                <p>{_portal_url()}</p>
             </div>
         </div>
     </body>
@@ -225,6 +246,8 @@ def send_password_reset_email(employee, reset_token):
     This link will expire in 24 hours.
     
     If you didn't request this, please ignore this email.
+
+    Portal: {_portal_url()}
     
     Best regards,
     IMS Team
@@ -241,6 +264,7 @@ def send_password_reset_email(employee, reset_token):
 def send_password_changed_email(employee):
     """Send confirmation email after password change"""
     subject = "Password Changed - Inventory Management System"
+    login_url = _portal_url("/login")
     
     html_content = f"""
     <!DOCTYPE html>
@@ -268,11 +292,12 @@ def send_password_changed_email(employee):
                 </div>
                 
                 <p>If you didn't make this change, please contact your administrator immediately.</p>
+                <p>Portal: <a href="{login_url}">{login_url}</a></p>
                 
                 <p>Best regards,<br>IMS Team</p>
             </div>
             <div class="footer">
-                <p>© 2024 Inventory Management System. All rights reserved.</p>
+                <p>{_portal_url()}</p>
             </div>
         </div>
     </body>
@@ -287,6 +312,8 @@ def send_password_changed_email(employee):
     Your password has been successfully changed.
     
     If you didn't make this change, please contact your administrator immediately.
+
+    Portal: {login_url}
     
     Best regards,
     IMS Team
@@ -329,6 +356,7 @@ def create_email_otp(employee):
 def send_otp_email(employee, otp_obj):
     """Send OTP to employee email"""
     subject = "Email Verification - OTP for Inventory Management System"
+    portal_url = _portal_url("/login")
     
     html_content = f"""
     <!DOCTYPE html>
@@ -362,11 +390,12 @@ def send_otp_email(employee, otp_obj):
                 <p><strong>Do not share this OTP with anyone.</strong></p>
                 
                 <p>If you did not request this OTP, please ignore this email and your account will be deactivated.</p>
+                <p>Portal: <a href="{portal_url}">{portal_url}</a></p>
                 
                 <p>Best regards,<br>IMS Team</p>
             </div>
             <div class="footer">
-                <p>© 2024 Inventory Management System. All rights reserved.</p>
+                <p>{_portal_url()}</p>
             </div>
         </div>
     </body>
@@ -385,6 +414,8 @@ def send_otp_email(employee, otp_obj):
     Do not share this OTP with anyone.
     
     If you did not request this OTP, please ignore this email.
+
+    Portal: {portal_url}
     
     Best regards,
     IMS Team
