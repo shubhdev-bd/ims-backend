@@ -31,6 +31,9 @@ from apps.authentication.models import Employee
 
 from django.shortcuts import render
 
+OCCUPIED_INVENTORY_ASSET_STATUSES = ['assigned', 'pending_claim', 'claimed']
+
+
 def home(request):
     return render(request, 'index.html')
 
@@ -934,24 +937,38 @@ class DashboardViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'])
     def stats(self, request):
         """Get dashboard statistics"""
-        
-        # Device statistics
-        total_devices = Device.objects.count()
-        available_devices = Device.objects.filter(status='available').count()
-        assigned_devices = Device.objects.filter(status='assigned').count()
-        maintenance_devices = Device.objects.filter(status='maintenance').count()
-        retired_devices = Device.objects.filter(status='retired').count()
+
+        device_total = Device.objects.count()
+        asset_total = InventoryAsset.objects.count()
+        device_available = Device.objects.filter(status='available').count()
+        asset_available = InventoryAsset.objects.filter(status='available').count()
+        device_assigned = Device.objects.filter(status='assigned').count()
+        asset_assigned = InventoryAsset.objects.filter(
+            status__in=OCCUPIED_INVENTORY_ASSET_STATUSES
+        ).count()
+        device_maintenance = Device.objects.filter(status='maintenance').count()
+        device_retired = Device.objects.filter(status='retired').count()
+        asset_retired = InventoryAsset.objects.filter(status='retired').count()
+
+        # Combined inventory statistics
+        total_devices = device_total + asset_total
+        available_devices = device_available + asset_available
+        assigned_devices = device_assigned + asset_assigned
+        maintenance_devices = device_maintenance
+        retired_devices = device_retired + asset_retired
         
         # Employee statistics
         total_employees = Employee.objects.filter(is_active=True).count()
         active_employees = Employee.objects.filter(
-            is_active=True,
-            assignments__status='active'
+            is_active=True
+        ).filter(
+            Q(assignments__status='active') |
+            Q(inventory_assets__status__in=OCCUPIED_INVENTORY_ASSET_STATUSES)
         ).distinct().count()
         
         # Assignment statistics
-        total_assignments = Assignment.objects.count()
-        active_assignments = Assignment.objects.filter(status='active').count()
+        total_assignments = Assignment.objects.count() + asset_assigned
+        active_assignments = Assignment.objects.filter(status='active').count() + asset_assigned
         
         # Ticket statistics
         total_tickets = TicketRequest.objects.count()
@@ -965,6 +982,14 @@ class DashboardViewSet(viewsets.ViewSet):
                 count=Count('id')
             ).values_list('device_type', 'count')
         )
+        asset_by_category = dict(
+            InventoryAsset.objects.values('category').annotate(
+                count=Count('id')
+            ).values_list('category', 'count')
+        )
+        for category, count in asset_by_category.items():
+            mapped_type = 'phone' if category == 'mobile' else category
+            device_by_type[mapped_type] = device_by_type.get(mapped_type, 0) + count
         
         # Recent data
         recent_assignments = Assignment.objects.select_related(
