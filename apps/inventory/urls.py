@@ -40,6 +40,7 @@ from .views import (
     DeviceRequestViewSet,
     DashboardViewSet,
     UploadInventoryView,
+    InventoryAssetViewSet,
 )
 
 # Router setup
@@ -49,6 +50,7 @@ router.register(r'assignments', AssignmentViewSet, basename='assignment')
 router.register(r'tickets', TicketRequestViewSet, basename='ticket')
 router.register(r'device-requests', DeviceRequestViewSet, basename='device-request')
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
+router.register(r'inventory-assets', InventoryAssetViewSet, basename='inventory-asset')
 
 # Final URLs
 urlpatterns = [

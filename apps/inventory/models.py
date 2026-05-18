@@ -5,6 +5,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 import uuid
+from django.contrib.postgres.fields import ArrayField
 
 
 class Device(models.Model):
@@ -389,3 +390,99 @@ class DashboardStats(models.Model):
         db_table = 'dashboard_stats'
         verbose_name = 'Dashboard Statistics'
         verbose_name_plural = 'Dashboard Statistics'
+
+
+class InventoryAsset(models.Model):
+    """Scalable model for CSV-imported inventory assets with category-specific metadata"""
+    
+    CATEGORY_CHOICES = [
+        ('pc', 'PC'),
+        ('laptop', 'Laptop'),
+        ('headphone', 'Headphone'),
+        ('connector', 'Connector'),
+        ('mobile', 'Mobile'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('available', 'Available'),
+        ('assigned', 'Assigned'),
+        ('pending_claim', 'Pending Claim'),
+        ('claimed', 'Claimed'),
+        ('retired', 'Retired'),
+    ]
+    
+    CONDITION_CHOICES = [
+        ('new', 'New'),
+        ('excellent', 'Excellent'),
+        ('good', 'Good'),
+        ('fair', 'Fair'),
+        ('poor', 'Poor'),
+    ]
+    
+    # Primary Key
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Category & Asset Info
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, db_index=True)
+    asset_name = models.CharField(max_length=255, db_index=True)
+    serial_number = models.CharField(max_length=100, unique=True, db_index=True, help_text="Unique identifier from CSV")
+    
+    # Assignment Info
+    assigned_person_name = models.CharField(max_length=255, db_index=True)
+    assigned_email = models.EmailField(null=True, blank=True, db_index=True)
+    assigned_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='inventory_assets'
+    )
+    assigned_date = models.DateField(null=True, blank=True)
+    assigned_by = models.CharField(max_length=255, blank=True)
+    
+    # Purchase Info
+    purchase_date = models.DateField(null=True, blank=True)
+    
+    # Quantity & Condition
+    quantity = models.IntegerField(default=1)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_claim', db_index=True)
+    condition = models.CharField(max_length=20, choices=CONDITION_CHOICES, default='good')
+    
+    # Claim Status
+    claimed = models.BooleanField(default=False, db_index=True)
+    pending_claim = models.BooleanField(default=True, db_index=True)
+    
+    # Email Workflow
+    mail_sent = models.BooleanField(default=False)
+    mail_sent_at = models.DateTimeField(null=True, blank=True)
+    
+    # Acknowledgment
+    acknowledged = models.BooleanField(default=False)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    
+    # Additional Info
+    remarks = models.TextField(blank=True)
+    
+    # Category-Specific Metadata (JSONField stores all category-specific data)
+    metadata = models.JSONField(default=dict, blank=True, help_text="Stores category-specific fields as JSON")
+    
+    # Duplicate Detection
+    csv_import_id = models.CharField(max_length=255, blank=True, help_text="CSV import batch identifier")
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'inventory_assets'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['category', 'status']),
+            models.Index(fields=['assigned_email', 'claimed']),
+            models.Index(fields=['serial_number']),
+        ]
+        verbose_name = 'Inventory Asset'
+        verbose_name_plural = 'Inventory Assets'
+    
+    def __str__(self):
+        return f"{self.get_category_display()} - {self.asset_name} ({self.serial_number})"

@@ -20,9 +20,13 @@ from .serializers import (
     DeviceRequestSerializer,
     DeviceRequestListSerializer,
     DashboardStatsSerializer,
+    InventoryAssetSerializer,
+    InventoryAssetListSerializer,
+    InventoryAssetUpdateEmailSerializer,
+    InventoryAssetClaimSerializer,
 )
 from .permissions import IsAdminOrReadOnly, IsAdminOrManager
-from .models import Device, Assignment, TicketRequest, DeviceRequest
+from .models import Device, Assignment, TicketRequest, DeviceRequest, InventoryAsset
 from apps.authentication.models import Employee
 
 from django.shortcuts import render
@@ -1105,3 +1109,265 @@ class UploadInventoryView(APIView):
             "message": "Inventory uploaded successfully",
             "created_devices": created_devices
         }, status=status.HTTP_201_CREATED)
+
+
+class InventoryAssetViewSet(viewsets.ModelViewSet):
+    """ViewSet for InventoryAsset - CSV-imported inventory"""
+    
+    queryset = InventoryAsset.objects.select_related('assigned_user').all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['asset_name', 'serial_number', 'assigned_person_name', 'assigned_email']
+    ordering_fields = ['created_at', 'assigned_date', 'asset_name']
+    ordering = ['-created_at']
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return InventoryAssetListSerializer
+        elif self.action == 'update_email':
+            return InventoryAssetUpdateEmailSerializer
+        elif self.action == 'claim':
+            return InventoryAssetClaimSerializer
+        return InventoryAssetSerializer
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = self.request.user
+        
+        # Filter by category
+        category = self.request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category=category)
+        
+        # Filter by status
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+        
+        # Filter by claimed status
+        claimed = self.request.query_params.get('claimed')
+        if claimed:
+            queryset = queryset.filter(claimed=claimed.lower() == 'true')
+        
+        # Filter by pending claim
+        pending = self.request.query_params.get('pending')
+        if pending:
+            queryset = queryset.filter(pending_claim=pending.lower() == 'true')
+        
+        # Filter by assigned status
+        assigned = self.request.query_params.get('assigned')
+        if assigned:
+            if assigned.lower() == 'true':
+                queryset = queryset.filter(assigned_user__isnull=False)
+            else:
+                queryset = queryset.filter(assigned_user__isnull=True)
+        
+        # For non-admin users, only show their own assets
+        if not user.is_staff and not user.is_superuser:
+            queryset = queryset.filter(assigned_user=user)
+        
+        return queryset
+    
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve', 'my_inventory']:
+            return [IsAuthenticated()]
+        elif self.action in ['update_email', 'send_claim_mail', 'claim']:
+            return [IsAuthenticated()]
+        else:
+            # Admin only for create, update, delete
+            return [IsAuthenticated(), IsAdminOrManager()]
+    
+    @action(detail=False, methods=['get'])
+    def my_inventory(self, request):
+        """Get current user's assigned inventory"""
+        if not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        assets = InventoryAsset.objects.filter(assigned_user=request.user).order_by('-created_at')
+        
+        # Paginate
+        page = self.paginate_queryset(assets)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(assets, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def assigned_inventory(self, request):
+        """Get all assigned inventory (admin only)"""
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {'error': 'Permission denied'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        assets = InventoryAsset.objects.filter(assigned_user__isnull=False).order_by('-created_at')
+        
+        # Paginate
+        page = self.paginate_queryset(assets)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(assets, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def pending_claims(self, request):
+        """Get all pending inventory claims (admin only)"""
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {'error': 'Permission denied'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        assets = InventoryAsset.objects.filter(
+            pending_claim=True,
+            assigned_email__isnull=False
+        ).order_by('-created_at')
+        
+        # Paginate
+        page = self.paginate_queryset(assets)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(assets, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['patch'])
+    def update_email(self, request, pk=None):
+        """Update assigned email and trigger claim mail"""
+        asset = self.get_object()
+        
+        # Check permission
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {'error': 'Permission denied'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = self.get_serializer(asset, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            
+            # Send claim email if email was updated
+            if asset.assigned_email:
+                email_result = email_service.send_inventory_claim_email(asset)
+                return Response({
+                    'asset': serializer.data,
+                    'email_sent': email_result.get('success', False),
+                    'email_result': email_result
+                })
+            
+            return Response(serializer.data)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def send_claim_mail(self, request, pk=None):
+        """Send claim email for asset"""
+        asset = self.get_object()
+        
+        # Check permission
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {'error': 'Permission denied'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if not asset.assigned_email:
+            return Response(
+                {'error': 'No email address for this asset'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        email_result = email_service.send_inventory_claim_email(asset)
+        
+        return Response({
+            'success': email_result.get('success', False),
+            'message': 'Claim email sent',
+            'details': email_result
+        })
+    
+    @action(detail=True, methods=['post'])
+    def claim(self, request, pk=None):
+        """Claim inventory asset (mark as claimed by current user)"""
+        asset = self.get_object()
+        
+        # Check if asset is assigned to user's email
+        if asset.assigned_email != request.user.email:
+            return Response(
+                {'error': 'This asset is not assigned to your email'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        asset.claimed = True
+        asset.pending_claim = False
+        asset.status = 'claimed'
+        asset.assigned_user = request.user
+        asset.save()
+        
+        serializer = self.get_serializer(asset)
+        return Response({
+            'message': 'Device claimed successfully',
+            'asset': serializer.data
+        })
+    
+    @action(detail=False, methods=['post'])
+    def bulk_import(self, request):
+        """Bulk import inventory from CSV file"""
+        from .csv_import_service import CSVImportService, CSVImportError
+        
+        # Check permission
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {'error': 'Permission denied'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if 'file' not in request.FILES:
+            return Response(
+                {'error': 'No file provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        file_obj = request.FILES['file']
+        category = request.data.get('category')
+        
+        # Save file temporarily
+        import tempfile
+        import os
+        
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_file:
+                for chunk in file_obj.chunks():
+                    tmp_file.write(chunk)
+                tmp_path = tmp_file.name
+            
+            # Import
+            service = CSVImportService(category=category)
+            results = service.import_from_file(tmp_path)
+            
+            return Response({
+                'success': True,
+                'message': 'Import completed',
+                'results': results
+            })
+        
+        except CSVImportError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        finally:
+            # Clean up temp file
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass

@@ -3,7 +3,7 @@ Inventory Serializers
 """
 from rest_framework import serializers
 from apps.authentication.serializers import EmployeeSerializer
-from .models import Device, Assignment, TicketRequest, DeviceRequest
+from .models import Device, Assignment, TicketRequest, DeviceRequest, InventoryAsset
 
 
 class DeviceSerializer(serializers.ModelSerializer):
@@ -243,4 +243,59 @@ class DashboardStatsSerializer(serializers.Serializer):
     device_by_type = serializers.DictField()
     recent_assignments = AssignmentListSerializer(many=True)
     recent_tickets = TicketRequestListSerializer(many=True)
+
+
+class InventoryAssetSerializer(serializers.ModelSerializer):
+    """Serializer for InventoryAsset model - Full details"""
+    
+    assigned_user_details = EmployeeSerializer(source='assigned_user', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    class Meta:
+        model = InventoryAsset
+        fields = [
+            'id', 'category', 'category_display', 'asset_name', 'serial_number',
+            'assigned_person_name', 'assigned_email', 'assigned_user', 'assigned_user_details',
+            'assigned_date', 'assigned_by', 'purchase_date', 'quantity',
+            'status', 'status_display', 'condition', 'claimed', 'pending_claim',
+            'mail_sent', 'mail_sent_at', 'acknowledged', 'acknowledged_at',
+            'remarks', 'metadata', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class InventoryAssetListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for inventory asset list"""
+    
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    assigned_user_name = serializers.CharField(source='assigned_user.full_name', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = InventoryAsset
+        fields = [
+            'id', 'category', 'category_display', 'asset_name', 'serial_number',
+            'assigned_person_name', 'assigned_email', 'assigned_user', 'assigned_user_name',
+            'assigned_date', 'status', 'status_display', 'condition',
+            'claimed', 'pending_claim', 'mail_sent', 'created_at'
+        ]
+
+
+class InventoryAssetUpdateEmailSerializer(serializers.ModelSerializer):
+    """Serializer for updating assigned email on inventory asset"""
+    
+    class Meta:
+        model = InventoryAsset
+        fields = ['id', 'assigned_email']
+        read_only_fields = ['id']
+
+
+class InventoryAssetClaimSerializer(serializers.ModelSerializer):
+    """Serializer for claiming inventory assets by user"""
+    
+    class Meta:
+        model = InventoryAsset
+        fields = ['id', 'claimed', 'pending_claim', 'acknowledged']
+        read_only_fields = ['id']
 
