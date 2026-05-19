@@ -2,6 +2,7 @@
 Inventory Models
 """
 from django.db import models
+from django.db.models import Q
 from django.conf import settings
 from django.utils import timezone
 import uuid
@@ -488,3 +489,49 @@ class InventoryAsset(models.Model):
     
     def __str__(self):
         return f"{self.get_category_display()} - {self.asset_name} ({self.serial_number})"
+
+
+def link_inventory_assets_for_employee(employee):
+    """
+    Attach email-assigned inventory assets to an employee account
+    without auto-claiming them.
+    """
+    if not employee or not getattr(employee, 'email', None):
+        return InventoryAsset.objects.none()
+
+    email = str(employee.email).strip()
+    if not email:
+        return InventoryAsset.objects.none()
+
+    matched_assets = InventoryAsset.objects.filter(
+        assigned_email__iexact=email,
+    ).filter(
+        Q(assigned_user__isnull=True) | Q(assigned_user=employee)
+    )
+
+    linkable_ids = list(
+        matched_assets.filter(assigned_user__isnull=True).values_list('id', flat=True)
+    )
+
+    if linkable_ids:
+        InventoryAsset.objects.filter(
+            id__in=linkable_ids,
+            claimed=False,
+        ).exclude(status='retired').update(
+            assigned_user=employee,
+            pending_claim=True,
+            status='pending_claim',
+        )
+        InventoryAsset.objects.filter(
+            id__in=linkable_ids,
+            claimed=True,
+        ).update(
+            assigned_user=employee,
+            pending_claim=False,
+            status='claimed',
+        )
+
+    return InventoryAsset.objects.filter(
+        Q(assigned_user=employee)
+        | Q(assigned_user__isnull=True, assigned_email__iexact=email)
+    ).select_related('assigned_user')

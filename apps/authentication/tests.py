@@ -3,6 +3,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from .models import Employee
+from apps.inventory.models import InventoryAsset
 
 
 class EmployeeUsernameTests(TestCase):
@@ -80,3 +81,31 @@ class LoginIdentifierTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("This login page is for admin accounts only.", str(response.data))
+
+
+class InventorySignupLinkingTests(TestCase):
+    def test_signup_links_inventory_asset_without_auto_claiming_it(self):
+        asset = InventoryAsset.objects.create(
+            category="laptop",
+            asset_name="MacBook Air",
+            serial_number="INV-SIGNUP-001",
+            assigned_person_name="Jane Doe",
+            assigned_email="jane.inventory@example.com",
+            status="assigned",
+            claimed=False,
+            pending_claim=False,
+        )
+
+        employee = Employee.objects.create_user(
+            email="jane.inventory@example.com",
+            password="StrongPass123!",
+            first_name="Jane",
+            last_name="Doe",
+            email_verified=True,
+        )
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.assigned_user, employee)
+        self.assertFalse(asset.claimed)
+        self.assertTrue(asset.pending_claim)
+        self.assertEqual(asset.status, "pending_claim")

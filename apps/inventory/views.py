@@ -21,12 +21,20 @@ from .serializers import (
     DeviceRequestListSerializer,
     DashboardStatsSerializer,
     InventoryAssetSerializer,
+    InventoryAssetCatalogSerializer,
     InventoryAssetListSerializer,
     InventoryAssetUpdateEmailSerializer,
     InventoryAssetClaimSerializer,
 )
 from .permissions import IsAdminOrReadOnly, IsAdminOrManager
-from .models import Device, Assignment, TicketRequest, DeviceRequest, InventoryAsset
+from .models import (
+    Device,
+    Assignment,
+    TicketRequest,
+    DeviceRequest,
+    InventoryAsset,
+    link_inventory_assets_for_employee,
+)
 from apps.authentication.models import Employee
 
 from django.shortcuts import render
@@ -1186,52 +1194,64 @@ class InventoryAssetViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'list':
             return InventoryAssetListSerializer
+        elif self.action == 'catalog':
+            return InventoryAssetCatalogSerializer
         elif self.action == 'update_email':
             return InventoryAssetUpdateEmailSerializer
         elif self.action == 'claim':
             return InventoryAssetClaimSerializer
         return InventoryAssetSerializer
+
+    def _apply_inventory_filters(self, queryset):
+        """Apply shared inventory filters from query params."""
+        category = self.request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category=category)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        claimed = self.request.query_params.get('claimed')
+        if claimed:
+            queryset = queryset.filter(claimed=claimed.lower() == 'true')
+
+        pending = self.request.query_params.get('pending')
+        if pending:
+            queryset = queryset.filter(pending_claim=pending.lower() == 'true')
+
+        assigned = self.request.query_params.get('assigned')
+        if assigned:
+            if assigned.lower() == 'true':
+                queryset = queryset.filter(
+                    Q(assigned_user__isnull=False) | Q(assigned_email__isnull=False)
+                )
+            else:
+                queryset = queryset.filter(
+                    assigned_user__isnull=True,
+                    assigned_email__isnull=True,
+                )
+
+        return queryset
     
     def get_queryset(self):
         queryset = super().get_queryset()
         user = self.request.user
-        
-        # Filter by category
-        category = self.request.query_params.get('category')
-        if category:
-            queryset = queryset.filter(category=category)
-        
-        # Filter by status
-        status_param = self.request.query_params.get('status')
-        if status_param:
-            queryset = queryset.filter(status=status_param)
-        
-        # Filter by claimed status
-        claimed = self.request.query_params.get('claimed')
-        if claimed:
-            queryset = queryset.filter(claimed=claimed.lower() == 'true')
-        
-        # Filter by pending claim
-        pending = self.request.query_params.get('pending')
-        if pending:
-            queryset = queryset.filter(pending_claim=pending.lower() == 'true')
-        
-        # Filter by assigned status
-        assigned = self.request.query_params.get('assigned')
-        if assigned:
-            if assigned.lower() == 'true':
-                queryset = queryset.filter(assigned_user__isnull=False)
-            else:
-                queryset = queryset.filter(assigned_user__isnull=True)
-        
-        # For non-admin users, only show their own assets
+
+        queryset = self._apply_inventory_filters(queryset)
+
+        # For non-admin users, only show their own linked or email-matched assets
         if not user.is_staff and not user.is_superuser:
-            queryset = queryset.filter(assigned_user=user)
+            link_inventory_assets_for_employee(user)
+            queryset = queryset.filter(
+                Q(assigned_user=user)
+                | Q(assigned_user__isnull=True, assigned_email__iexact=user.email)
+            )
         
         return queryset
     
     def get_permissions(self):
-        if self.action in ['list', 'retrieve', 'my_inventory']:
+        if self.action in ['list', 'retrieve', 'my_inventory', 'catalog']:
             return [IsAuthenticated()]
         elif self.action in ['update_email', 'send_claim_mail', 'claim']:
             return [IsAuthenticated()]
@@ -1248,7 +1268,7 @@ class InventoryAssetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_401_UNAUTHORIZED
             )
         
-        assets = InventoryAsset.objects.filter(assigned_user=request.user).order_by('-created_at')
+        assets = link_inventory_assets_for_employee(request.user).order_by('-created_at')
         
         # Paginate
         page = self.paginate_queryset(assets)
@@ -1256,6 +1276,22 @@ class InventoryAssetViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         
+        serializer = self.get_serializer(assets, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def catalog(self, request):
+        """Browse the full inventory catalog with safe fields for users."""
+        assets = self._apply_inventory_filters(
+            InventoryAsset.objects.select_related('assigned_user').all()
+        )
+        assets = self.filter_queryset(assets)
+
+        page = self.paginate_queryset(assets)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
         serializer = self.get_serializer(assets, many=True)
         return Response(serializer.data)
     
@@ -1268,7 +1304,9 @@ class InventoryAssetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        assets = InventoryAsset.objects.filter(assigned_user__isnull=False).order_by('-created_at')
+        assets = InventoryAsset.objects.filter(
+            Q(assigned_user__isnull=False) | Q(assigned_email__isnull=False)
+        ).order_by('-created_at')
         
         # Paginate
         page = self.paginate_queryset(assets)
@@ -1317,17 +1355,33 @@ class InventoryAssetViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(asset, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            
-            # Send claim email if email was updated
-            if asset.assigned_email:
-                email_result = email_service.send_inventory_claim_email(asset)
-                return Response({
-                    'asset': serializer.data,
-                    'email_sent': email_result.get('success', False),
-                    'email_result': email_result
-                })
-            
-            return Response(serializer.data)
+            asset.refresh_from_db()
+
+            if asset.assigned_email and not asset.claimed and asset.status != 'retired':
+                asset.pending_claim = True
+                asset.status = 'pending_claim'
+                asset.acknowledged = False
+                asset.acknowledged_at = None
+                asset.save(
+                    update_fields=[
+                        'pending_claim',
+                        'status',
+                        'acknowledged',
+                        'acknowledged_at',
+                        'updated_at',
+                    ]
+                )
+
+            email_sent = bool(asset.assigned_email and asset.mail_sent)
+            return Response({
+                'asset': InventoryAssetSerializer(asset).data,
+                'email_sent': email_sent,
+                'email_result': {
+                    'success': email_sent,
+                    'message': 'Claim email handled by inventory signal.'
+                    if asset.assigned_email else 'No assigned email on this asset.'
+                }
+            })
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
@@ -1363,7 +1417,7 @@ class InventoryAssetViewSet(viewsets.ModelViewSet):
         asset = self.get_object()
         
         # Check if asset is assigned to user's email
-        if asset.assigned_email != request.user.email:
+        if not asset.assigned_email or asset.assigned_email.strip().lower() != request.user.email.strip().lower():
             return Response(
                 {'error': 'This asset is not assigned to your email'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1373,6 +1427,8 @@ class InventoryAssetViewSet(viewsets.ModelViewSet):
         asset.pending_claim = False
         asset.status = 'claimed'
         asset.assigned_user = request.user
+        asset.acknowledged = True
+        asset.acknowledged_at = timezone.now()
         asset.save()
         
         serializer = self.get_serializer(asset)

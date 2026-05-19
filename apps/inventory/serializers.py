@@ -282,6 +282,28 @@ class InventoryAssetListSerializer(serializers.ModelSerializer):
         ]
 
 
+class InventoryAssetCatalogSerializer(serializers.ModelSerializer):
+    """Safe inventory catalog serializer for authenticated user browsing"""
+
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    assigned_user_name = serializers.CharField(
+        source='assigned_user.full_name',
+        read_only=True,
+        allow_null=True,
+    )
+
+    class Meta:
+        model = InventoryAsset
+        fields = [
+            'id', 'category', 'category_display', 'asset_name', 'serial_number',
+            'assigned_user', 'assigned_user_name', 'assigned_date',
+            'purchase_date', 'status', 'status_display', 'condition',
+            'claimed', 'pending_claim', 'remarks', 'metadata',
+            'created_at', 'updated_at'
+        ]
+
+
 class InventoryAssetUpdateEmailSerializer(serializers.ModelSerializer):
     """Serializer for updating assigned email on inventory asset"""
     

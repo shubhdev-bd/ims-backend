@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.authentication.models import Employee
-from .models import Assignment, Device, DeviceRequest, TicketRequest
+from .models import Assignment, Device, DeviceRequest, InventoryAsset, TicketRequest
 
 
 @override_settings(APPS_SCRIPT_URL="")
@@ -247,3 +247,61 @@ class MyAssignmentsPayloadTests(TestCase):
         self.assertEqual(data["expected_return_date"], "2026-05-10")
         self.assertEqual(data["consent_form_data"]["employee_name"], "Assigned User")
         self.assertEqual(data["consent_images"], ["https://example.com/consent-1.png"])
+
+
+@override_settings(APPS_SCRIPT_URL="")
+class InventoryAssetClaimFlowTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.employee = Employee.objects.create_user(
+            email="inventory.user@example.com",
+            password="StrongPass123!",
+            first_name="Inventory",
+            last_name="User",
+            role="employee",
+            email_verified=True,
+        )
+        self.asset = InventoryAsset.objects.create(
+            category="laptop",
+            asset_name="Dell Latitude 5440",
+            serial_number="INV-1001",
+            assigned_person_name="Inventory User",
+            assigned_email="inventory.user@example.com",
+            status="assigned",
+            claimed=False,
+            pending_claim=False,
+        )
+
+    def test_my_inventory_links_email_assigned_asset_and_keeps_claim_pending(self):
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.get("/api/inventory/inventory-assets/my_inventory/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data["results"] if isinstance(response.data, dict) else response.data
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["serial_number"], "INV-1001")
+        self.assertTrue(data[0]["pending_claim"])
+        self.assertFalse(data[0]["claimed"])
+
+        self.asset.refresh_from_db()
+        self.assertEqual(self.asset.assigned_user, self.employee)
+        self.assertEqual(self.asset.status, "pending_claim")
+        self.assertTrue(self.asset.pending_claim)
+        self.assertFalse(self.asset.claimed)
+
+    def test_claim_marks_asset_claimed_and_acknowledged(self):
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.post(
+            f"/api/inventory/inventory-assets/{self.asset.id}/claim/"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.asset.refresh_from_db()
+        self.assertTrue(self.asset.claimed)
+        self.assertFalse(self.asset.pending_claim)
+        self.assertEqual(self.asset.status, "claimed")
+        self.assertEqual(self.asset.assigned_user, self.employee)
+        self.assertTrue(self.asset.acknowledged)
+        self.assertIsNotNone(self.asset.acknowledged_at)
