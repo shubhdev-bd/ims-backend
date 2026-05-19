@@ -79,7 +79,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'device', 'device_details', 'employee', 'employee_details',
             'assigned_date', 'return_date', 'expected_return_date',
-            'status', 'assignment_notes', 'return_notes',
+            'status', 'assignment_notes', 'return_notes', 'cycle_images',
             'assigned_by', 'assigned_by_name',
             'consent_form_data', 'consent_images', 'consent_approved',
             'consent_approved_at', 'consent_approved_by',
@@ -298,4 +298,3 @@ class InventoryAssetClaimSerializer(serializers.ModelSerializer):
         model = InventoryAsset
         fields = ['id', 'claimed', 'pending_claim', 'acknowledged']
         read_only_fields = ['id']
-

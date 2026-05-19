@@ -207,9 +207,19 @@ APPS_SCRIPT_URL = config("APPS_SCRIPT_URL", default="")
 APPS_SCRIPT_API_KEY = config("APPS_SCRIPT_API_KEY", default="")
 
 # Frontend URL for portal and email links
-FRONTEND_URL = config(
-    "FRONTEND_URL", default="https://ims-frontend-lilac-alpha.vercel.app"
-)
+DEFAULT_FRONTEND_URL = "https://ims-frontend-lilac-alpha.vercel.app"
+FRONTEND_URL = config("FRONTEND_URL", default=DEFAULT_FRONTEND_URL).rstrip("/")
+
+# Prevent email/portal links from pointing to localhost in deployed environments.
+if FRONTEND_URL.startswith(
+    (
+        "http://localhost",
+        "https://localhost",
+        "http://127.0.0.1",
+        "https://127.0.0.1",
+    )
+):
+    FRONTEND_URL = DEFAULT_FRONTEND_URL
 
 # Email Configuration (fallback if not using Apps Script)
 # Use SMTP for actual email delivery, fallback to console if credentials not provided

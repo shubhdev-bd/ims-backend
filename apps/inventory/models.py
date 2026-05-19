@@ -124,6 +124,8 @@ class Assignment(models.Model):
     # Notes
     assignment_notes = models.TextField(blank=True)
     return_notes = models.TextField(blank=True)
+    # Admin-uploaded device photos for this request cycle
+    cycle_images = models.JSONField(default=list, blank=True)
     
     # Assigned by
     assigned_by = models.ForeignKey(

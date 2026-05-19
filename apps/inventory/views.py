@@ -259,6 +259,11 @@ class AssignmentViewSet(viewsets.ModelViewSet):
             return Response({
                 'error': 'Assignment must be approved or consent pending before submitting consent'
             }, status=status.HTTP_400_BAD_REQUEST)
+
+        if not assignment.cycle_images:
+            return Response({
+                'error': 'Admin must upload the latest device images before consent can be submitted.'
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         consent_data = request.data.get('consent_form_data', {})
         consent_images = request.data.get('consent_images', [])
@@ -437,6 +442,31 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         
         serializer = AssignmentSerializer(assignments, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['patch'])
+    def update_cycle_images(self, request, pk=None):
+        """Store admin-uploaded device images for the current request cycle."""
+        assignment = self.get_object()
+
+        if request.user.role not in ['admin', 'manager']:
+            return Response({
+                'error': 'Only admins and managers can update device images'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        cycle_images = request.data.get('cycle_images', [])
+        if not isinstance(cycle_images, list):
+            return Response({
+                'error': 'cycle_images must be a list of image URLs'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        assignment.cycle_images = cycle_images
+        assignment.save(update_fields=['cycle_images', 'updated_at'])
+
+        serializer = self.get_serializer(assignment)
+        return Response({
+            'message': 'Request cycle images updated successfully',
+            'assignment': serializer.data
+        })
     
     @action(detail=True, methods=['post'])
     def grant_device(self, request, pk=None):
@@ -827,6 +857,12 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
                 'error': 'Only admins and managers can approve requests'
             }, status=status.HTTP_403_FORBIDDEN)
 
+        cycle_images = request.data.get('cycle_images', [])
+        if not isinstance(cycle_images, list) or len(cycle_images) == 0:
+            return Response({
+                'error': 'Please upload at least one latest device image before sending consent.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         # Allocate an available device that matches the request.
         # This keeps the flow consistent: once approved, the employee must fill consent
         # for a concrete device assignment.
@@ -851,6 +887,7 @@ class DeviceRequestViewSet(viewsets.ModelViewSet):
             status='consent_pending',
             assigned_by=request.user,
             assignment_notes=f"Auto-granted from device request {device_request.id}",
+            cycle_images=cycle_images,
         )
 
         device_request.status = 'consent_pending'
