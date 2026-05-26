@@ -12,16 +12,37 @@ class EmployeeSerializer(serializers.ModelSerializer):
     assigned_devices_count = serializers.SerializerMethodField()
 
     ACTIVE_ASSIGNMENT_STATUSES = {'active', 'approved'}
+    ACTIVE_INVENTORY_STATUSES = {'assigned', 'pending_claim', 'claimed'}
 
     def get_assigned_devices_count(self, obj):
         prefetched_assignments = getattr(obj, '_prefetched_objects_cache', {}).get('assignments')
+        assignment_count = None
         if prefetched_assignments is not None:
-            return sum(
+            assignment_count = sum(
                 1 for assignment in prefetched_assignments
                 if assignment.status in self.ACTIVE_ASSIGNMENT_STATUSES
             )
+        else:
+            assignment_count = obj.assignments.filter(
+                status__in=self.ACTIVE_ASSIGNMENT_STATUSES,
+            ).count()
 
-        return obj.assignments.filter(status__in=self.ACTIVE_ASSIGNMENT_STATUSES).count()
+        prefetched_inventory_assets = getattr(
+            obj,
+            '_prefetched_objects_cache',
+            {},
+        ).get('inventory_assets')
+        if prefetched_inventory_assets is not None:
+            inventory_count = sum(
+                1 for asset in prefetched_inventory_assets
+                if asset.status in self.ACTIVE_INVENTORY_STATUSES
+            )
+        else:
+            inventory_count = obj.inventory_assets.filter(
+                status__in=self.ACTIVE_INVENTORY_STATUSES,
+            ).count()
+
+        return assignment_count + inventory_count
 
     class Meta:
         model = Employee

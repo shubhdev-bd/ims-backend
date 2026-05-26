@@ -443,7 +443,7 @@ class InventoryEmailService:
             return {"success": False, "error": "No email address for inventory asset"}
 
         subject = "Device Assignment - Action Required"
-        asset_link = f"{settings.FRONTEND_URL}/my-inventory"
+        asset_link = f"{settings.FRONTEND_URL}/mydevices"
 
         html_body = f"""
         <!DOCTYPE html>
@@ -495,12 +495,12 @@ class InventoryEmailService:
                     <p><strong>What you need to do:</strong></p>
                     <ol>
                         <li>Sign up or log in to the IMS portal</li>
-                        <li>Go to "My Inventory" section</li>
+                        <li>Go to "My Devices" section</li>
                         <li>Review your assigned device</li>
                         <li>Acknowledge receipt of the device</li>
                     </ol>
                     
-                    <a href="{asset_link}" class="button">View My Inventory →</a>
+                    <a href="{asset_link}" class="button">View My Devices →</a>
                     
                     <p style="margin-top: 20px; color: #666; font-size: 14px;">
                         If you did not expect this email or have questions about your device assignment, please contact the IT department.

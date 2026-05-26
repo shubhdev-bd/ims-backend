@@ -3,6 +3,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from .models import Employee
+from .serializers import EmployeeSerializer
 from apps.inventory.models import InventoryAsset
 
 
@@ -109,3 +110,28 @@ class InventorySignupLinkingTests(TestCase):
         self.assertFalse(asset.claimed)
         self.assertTrue(asset.pending_claim)
         self.assertEqual(asset.status, "pending_claim")
+
+    def test_employee_serializer_counts_inventory_assets_as_assigned_devices(self):
+        employee = Employee.objects.create_user(
+            email="claimed.inventory@example.com",
+            password="StrongPass123!",
+            first_name="Claimed",
+            last_name="Inventory",
+            email_verified=True,
+        )
+
+        InventoryAsset.objects.create(
+            category="laptop",
+            asset_name="ThinkPad X1",
+            serial_number="INV-SIGNUP-COUNT-001",
+            assigned_person_name="Claimed Inventory",
+            assigned_email=employee.email,
+            assigned_user=employee,
+            status="claimed",
+            claimed=True,
+            pending_claim=False,
+        )
+
+        serializer = EmployeeSerializer(employee)
+
+        self.assertEqual(serializer.data["assigned_devices_count"], 1)
