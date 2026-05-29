@@ -76,6 +76,15 @@ def inventory_asset_post_save(sender, instance, created, **kwargs):
         # 3. Email wasn't already sent (to avoid duplicates)
         if instance.assigned_email and not instance.mail_sent:
             if created or (previous_email != instance.assigned_email):
+                if (
+                    instance.requires_desk_number_for_claim()
+                    and not instance.has_required_desk_number()
+                ):
+                    logger.info(
+                        "Skipping claim email for PC asset %s until desk number is set",
+                        instance.id,
+                    )
+                    return
                 logger.info(
                     f"Sending inventory claim email to {instance.assigned_email} "
                     f"for asset {instance.asset_name} ({instance.serial_number})"

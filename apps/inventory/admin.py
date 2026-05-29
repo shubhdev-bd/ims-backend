@@ -462,6 +462,7 @@ class InventoryAssetAdmin(admin.ModelAdmin):
         "category",
         "serial_number",
         "assigned_person_name",
+        "desk_number",
         "assigned_email",
         "status",
         "claimed",
@@ -492,6 +493,7 @@ class InventoryAssetAdmin(admin.ModelAdmin):
         "serial_number",
         "assigned_person_name",
         "assigned_email",
+        "desk_number",
     ]
 
     # -------------------------------------------------
@@ -534,6 +536,7 @@ class InventoryAssetAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "assigned_person_name",
+                    "desk_number",
                     "assigned_email",
                     "assigned_user",
                     "assigned_date",
@@ -658,6 +661,11 @@ class InventoryAssetAdmin(admin.ModelAdmin):
         for asset in queryset:
 
             if not asset.assigned_email:
+
+                failed_count += 1
+                continue
+
+            if asset.requires_desk_number_for_claim() and not asset.has_required_desk_number():
 
                 failed_count += 1
                 continue

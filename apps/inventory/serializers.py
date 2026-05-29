@@ -423,6 +423,7 @@ class InventoryAssetSerializer(serializers.ModelSerializer):
             "serial_number",
             "assigned_person_name",
             "assigned_email",
+            "desk_number",
             "assigned_user",
             "assigned_user_details",
             "assigned_date",
@@ -467,6 +468,7 @@ class InventoryAssetListSerializer(serializers.ModelSerializer):
             "serial_number",
             "assigned_person_name",
             "assigned_email",
+            "desk_number",
             "assigned_user",
             "assigned_user_name",
             "assigned_date",
@@ -503,6 +505,7 @@ class InventoryAssetCatalogSerializer(serializers.ModelSerializer):
             "serial_number",
             "assigned_user",
             "assigned_user_name",
+            "desk_number",
             "assigned_date",
             "purchase_date",
             "status",
@@ -520,9 +523,32 @@ class InventoryAssetCatalogSerializer(serializers.ModelSerializer):
 class InventoryAssetUpdateEmailSerializer(serializers.ModelSerializer):
     """Serializer for updating assigned email on inventory asset"""
 
+    def validate(self, attrs):
+        assigned_email = attrs.get("assigned_email", getattr(self.instance, "assigned_email", None))
+        desk_number = attrs.get("desk_number", getattr(self.instance, "desk_number", None))
+
+        if "desk_number" in attrs:
+            attrs["desk_number"] = (attrs.get("desk_number") or "").strip() or None
+            desk_number = attrs["desk_number"]
+
+        if (
+            getattr(self.instance, "category", None) == "pc"
+            and assigned_email
+            and not ((desk_number or "").strip())
+        ):
+            raise serializers.ValidationError(
+                {
+                    "desk_number": (
+                        "Desk Number is required for PC assets before sending claim email."
+                    )
+                }
+            )
+
+        return attrs
+
     class Meta:
         model = InventoryAsset
-        fields = ["id", "assigned_email"]
+        fields = ["id", "assigned_email", "desk_number"]
         read_only_fields = ["id"]
 
 

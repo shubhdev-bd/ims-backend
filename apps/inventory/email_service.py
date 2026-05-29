@@ -441,9 +441,33 @@ class InventoryEmailService:
                 f"Cannot send claim email for asset {inventory_asset.id} - no email address"
             )
             return {"success": False, "error": "No email address for inventory asset"}
+        if (
+            inventory_asset.requires_desk_number_for_claim()
+            and not inventory_asset.has_required_desk_number()
+        ):
+            logger.warning(
+                "Cannot send claim email for PC asset %s - desk number missing",
+                inventory_asset.id,
+            )
+            return {
+                "success": False,
+                "error": "Desk Number is required for PC assets before sending claim email",
+            }
 
         subject = "Device Assignment - Action Required"
         asset_link = f"{settings.FRONTEND_URL}/mydevices"
+        desk_number = inventory_asset.normalized_desk_number()
+        desk_number_html = ""
+        desk_number_text = ""
+
+        if inventory_asset.requires_desk_number_for_claim():
+            desk_number_html = f"""
+                            <tr style="border-bottom: 1px solid #ddd;">
+                                <td style="padding: 8px; font-weight: bold;">Desk Number:</td>
+                                <td style="padding: 8px;">{desk_number}</td>
+                            </tr>
+            """
+            desk_number_text = f"Desk Number: {desk_number}\n"
 
         html_body = f"""
         <!DOCTYPE html>
@@ -489,6 +513,7 @@ class InventoryEmailService:
                                 <td style="padding: 8px; font-weight: bold;">Assigned Date:</td>
                                 <td style="padding: 8px;">{inventory_asset.assigned_date.strftime('%d-%m-%Y') if inventory_asset.assigned_date else 'N/A'}</td>
                             </tr>
+                            {desk_number_html}
                         </table>
                     </div>
                     
@@ -525,6 +550,7 @@ Category: {inventory_asset.get_category_display()}
 Device: {inventory_asset.asset_name}
 Serial Number: {inventory_asset.serial_number}
 Assigned Date: {inventory_asset.assigned_date.strftime('%d-%m-%Y') if inventory_asset.assigned_date else 'N/A'}
+{desk_number_text}
 
 Please sign up or log in to claim your device:
 {asset_link}

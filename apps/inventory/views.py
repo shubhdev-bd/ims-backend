@@ -1404,6 +1404,7 @@ class InventoryAssetViewSet(viewsets.ModelViewSet):
         "serial_number",
         "assigned_person_name",
         "assigned_email",
+        "desk_number",
     ]
     ordering_fields = ["created_at", "assigned_date", "asset_name"]
     ordering = ["-created_at"]
@@ -1619,6 +1620,14 @@ class InventoryAssetViewSet(viewsets.ModelViewSet):
         if not asset.assigned_email:
             return Response(
                 {"error": "No email address for this asset"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if asset.requires_desk_number_for_claim() and not asset.has_required_desk_number():
+            return Response(
+                {
+                    "error": "Desk Number is required for PC assets before sending claim email."
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

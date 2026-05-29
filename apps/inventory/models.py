@@ -461,6 +461,7 @@ class InventoryAsset(models.Model):
     # Assignment Info
     assigned_person_name = models.CharField(max_length=255, db_index=True)
     assigned_email = models.EmailField(null=True, blank=True, db_index=True)
+    desk_number = models.CharField(max_length=100, null=True, blank=True, db_index=True)
     assigned_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -527,6 +528,15 @@ class InventoryAsset(models.Model):
         return (
             f"{self.get_category_display()} - {self.asset_name} ({self.serial_number})"
         )
+
+    def normalized_desk_number(self):
+        return (self.desk_number or "").strip()
+
+    def requires_desk_number_for_claim(self):
+        return self.category == "pc"
+
+    def has_required_desk_number(self):
+        return bool(self.normalized_desk_number())
 
 
 def link_inventory_assets_for_employee(employee):

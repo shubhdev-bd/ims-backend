@@ -305,3 +305,67 @@ class InventoryAssetClaimFlowTests(TestCase):
         self.assertEqual(self.asset.assigned_user, self.employee)
         self.assertTrue(self.asset.acknowledged)
         self.assertIsNotNone(self.asset.acknowledged_at)
+
+
+@override_settings(APPS_SCRIPT_URL="")
+class InventoryAssetDeskNumberTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = Employee.objects.create_user(
+            email="inventory-admin@example.com",
+            password="StrongPass123!",
+            first_name="Inventory",
+            last_name="Admin",
+            role="admin",
+            is_staff=True,
+            email_verified=True,
+        )
+        self.pc_asset = InventoryAsset.objects.create(
+            category="pc",
+            asset_name="HP EliteDesk 800",
+            serial_number="PC-DESK-001",
+            assigned_person_name="Desk User",
+            status="assigned",
+            claimed=False,
+            pending_claim=False,
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def test_update_email_requires_desk_number_for_pc_assets(self):
+        response = self.client.patch(
+            f"/api/inventory/inventory-assets/{self.pc_asset.id}/update_email/",
+            {"assigned_email": "desk.user@example.com"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("desk_number", response.data)
+
+    def test_update_email_saves_desk_number_for_pc_assets(self):
+        response = self.client.patch(
+            f"/api/inventory/inventory-assets/{self.pc_asset.id}/update_email/",
+            {
+                "assigned_email": "desk.user@example.com",
+                "desk_number": "A-14",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.pc_asset.refresh_from_db()
+        self.assertEqual(self.pc_asset.assigned_email, "desk.user@example.com")
+        self.assertEqual(self.pc_asset.desk_number, "A-14")
+
+    def test_send_claim_mail_requires_desk_number_for_pc_assets(self):
+        self.pc_asset.assigned_email = "desk.user@example.com"
+        self.pc_asset.save(update_fields=["assigned_email"])
+
+        response = self.client.post(
+            f"/api/inventory/inventory-assets/{self.pc_asset.id}/send_claim_mail/"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error"],
+            "Desk Number is required for PC assets before sending claim email.",
+        )
