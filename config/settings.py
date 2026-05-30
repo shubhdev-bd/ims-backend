@@ -20,6 +20,7 @@ ALLOWED_HOSTS = [
     "127.0.0.1",
     "ims-backend-e4fp.onrender.com",
     "ims-frontend-lilac-alpha.vercel.app",
+    "www.bd-ims.xyz",
 ]
 
 
@@ -28,6 +29,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     "https://ims-backend-e4fp.onrender.com",
     "https://ims-frontend-lilac-alpha.vercel.app",
+    "https://www.bd-ims.xyz",
 ]
 
 # Application definition
@@ -164,7 +166,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOWED_ORIGINS = [
     "https://ims-backend-e4fp.onrender.com",
-    "https://ims-frontend-lilac-alpha.vercel.app",
+    "https://www.bd-ims.xyz",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
@@ -207,7 +209,7 @@ APPS_SCRIPT_URL = config("APPS_SCRIPT_URL", default="")
 APPS_SCRIPT_API_KEY = config("APPS_SCRIPT_API_KEY", default="")
 
 # Frontend URL for portal and email links
-DEFAULT_FRONTEND_URL = "https://ims-frontend-lilac-alpha.vercel.app"
+DEFAULT_FRONTEND_URL = "https://www.bd-ims.xyz"
 FRONTEND_URL = config("FRONTEND_URL", default=DEFAULT_FRONTEND_URL).rstrip("/")
 
 # Prevent email/portal links from pointing to localhost in deployed environments.
